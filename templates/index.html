@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Controle de Guarda das Filhas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      body { padding-top: 40px; }
+      .resultado { min-height: 80px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="mb-4">CONTROLE DE GUARDA DAS FILHAS</h1>
+
+      <form id="form" class="mb-4">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Data em que você estava com suas filhas</label>
+            <input type="date" class="form-control" id="data_referencia" name="data_referencia" value="{{ today }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Data do evento</label>
+            <input type="date" class="form-control" id="data_evento" name="data_evento" value="{{ today }}">
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <button type="button" id="verificar" class="btn btn-primary me-2">Verificar Evento</button>
+          <a id="listar" class="btn btn-secondary" href="#">Próximos Finais de Semana</a>
+        </div>
+      </form>
+
+      <div id="resultado" class="resultado mt-4 p-3 rounded"></div>
+    </div>
+
+    <script>
+      document.getElementById('verificar').addEventListener('click', async () => {
+        const form = document.getElementById('form');
+        const data = new FormData(form);
+
+        const resp = await fetch('/verificar', { method: 'POST', body: data });
+        const json = await resp.json();
+
+        const resultado = document.getElementById('resultado');
+        if (json.error) {
+          resultado.innerText = json.error;
+          resultado.className = 'resultado alert alert-warning';
+          return;
+        }
+
+        if (json.color === 'success') {
+          resultado.className = 'resultado alert alert-success';
+        } else {
+          resultado.className = 'resultado alert alert-danger';
+        }
+
+        resultado.innerText = json.text;
+      });
+
+      document.getElementById('listar').addEventListener('click', (e) => {
+        e.preventDefault();
+        const ref = document.getElementById('data_referencia').value;
+        const url = '/listar' + (ref ? `?data_referencia=${ref}` : '');
+        window.location.href = url;
+      });
+    </script>
+
+  </body>
+</html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Guarda das Filhas</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            max-width: 750px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        .titulo {
+            text-align: center;
+            font-size: 26px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .frame {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-group label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .form-group input {
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .botoes {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            flex: 1;
+            min-width: 200px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-verificar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-verificar:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-lista {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-lista:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        }
+
+        .resultado {
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: bold;
+            min-height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            display: none;
+            line-height: 1.6;
+        }
+
+        .resultado.sucesso {
+            background: #E8F5E9;
+            color: #2E7D32;
+            border: 2px solid #4CAF50;
+            display: flex;
+        }
+
+        .resultado.erro {
+            background: #FFEBEE;
+            color: #C62828;
+            border: 2px solid #F44336;
+            display: flex;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideDown 0.3s;
+            top: 50%;
+            left: 50%;
+            position: absolute;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translate(-50%, -60%);
+                opacity: 0;
+            }
+            to {
+                transform: translate(-50%, -50%);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .fechar {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .fechar:hover {
+            color: #000;
+        }
+
+        .tabela {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: "Consolas", monospace;
+            font-size: 13px;
+        }
+
+        .tabela thead {
+            background: #667eea;
+            color: white;
+        }
+
+        .tabela th {
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .tabela td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .tabela tbody tr:hover {
+            background: #f5f5f5;
+        }
+
+        .tabela tbody tr.com-filhas {
+            background: #E8F5E9;
+        }
+
+        .tabela tbody tr.sem-filhas {
+            background: #FFEBEE;
+        }
+
+        .carregando {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .titulo {
+                font-size: 20px;
+            }
+
+            .btn {
+                min-width: 150px;
+                padding: 10px 15px;
+                font-size: 13px;
+            }
+
+            .tabela {
+                font-size: 12px;
+            }
+
+            .tabela th,
+            .tabela td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="titulo">🏠 CONTROLE DE GUARDA DAS FILHAS</div>
+
+        <div class="frame">
+            <div class="form-group">
+                <label for="dataReferencia">Data em que você estava com suas filhas</label>
+                <input type="date" id="dataReferencia" required>
+            </div>
+
+            <div class="form-group">
+                <label for="dataEvento">Data do evento</label>
+                <input type="date" id="dataEvento" required>
+            </div>
+
+            <div class="botoes">
+                <button class="btn btn-verificar" onclick="verificarEvento()">✓ Verificar Evento</button>
+                <button class="btn btn-lista" onclick="abrirModal()">📅 Próximos Finais de Semana</button>
+            </div>
+
+            <div id="resultado" class="resultado"></div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="fechar" onclick="fecharModal()">&times;</span>
+            <div class="modal-header">📅 PRÓXIMOS FINAIS DE SEMANA</div>
+
+            <div id="carregando" class="carregando">
+                <div class="spinner"></div>
+                <p>Carregando dados...</p>
+            </div>
+
+            <table id="tabela" class="tabela" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>SEMANA</th>
+                        <th>INÍCIO</th>
+                        <th>FIM</th>
+                        <th>STATUS</th>
+                    </tr>
+                </thead>
+                <tbody id="tabelaCorpo">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Configurar datas padrão
+        document.addEventListener("DOMContentLoaded", function () {
+            const hoje = new Date();
+            document.getElementById("dataEvento").valueAsDate = hoje;
+            
+            // Data de referência: um sábado qualquer (ex: 01/01/2024 era sábado)
+            const dataRef = new Date(2024, 0, 6); // 6 de janeiro de 2024 (sábado)
+            document.getElementById("dataReferencia").valueAsDate = dataRef;
+        });
+
+        function verificarEvento() {
+            const dataRef = document.getElementById("dataReferencia").value;
+            const dataEv = document.getElementById("dataEvento").value;
+            const resultado = document.getElementById("resultado");
+
+            if (!dataRef || !dataEv) {
+                resultado.textContent = "⚠️ Preencha ambas as datas!";
+                resultado.className = "resultado erro";
+                return;
+            }
+
+            fetch("/api/verificar", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    data_referencia: dataRef,
+                    data_evento: dataEv
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.sucesso) {
+                        const d = data.dados;
+                        if (d.com_filhas) {
+                            resultado.innerHTML = `✅ VOCÊ ESTARÁ COM SUAS FILHAS<br><br>Período: ${d.inicio} até ${d.fim}`;
+                            resultado.className = "resultado sucesso";
+                        } else {
+                            resultado.innerHTML = `❌ VOCÊ NÃO ESTARÁ COM SUAS FILHAS<br><br>Final de semana: ${d.inicio} até ${d.fim}`;
+                            resultado.className = "resultado erro";
+                        }
+                    } else {
+                        resultado.textContent = "Erro ao processar dados";
+                        resultado.className = "resultado erro";
+                    }
+                })
+                .catch(error => {
+                    resultado.textContent = "Erro ao conectar ao servidor";
+                    resultado.className = "resultado erro";
+                });
+        }
+
+        function abrirModal() {
+            const dataRef = document.getElementById("dataReferencia").value;
+            
+            if (!dataRef) {
+                alert("Preencha a data de referência!");
+                return;
+            }
+
+            const modal = document.getElementById("modal");
+            const carregando = document.getElementById("carregando");
+            const tabela = document.getElementById("tabela");
+            
+            modal.style.display = "block";
+            carregando.style.display = "block";
+            tabela.style.display = "none";
+
+            fetch("/api/periodos", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    data_referencia: dataRef
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.sucesso) {
+                        preencherTabela(data.dados);
+                        carregando.style.display = "none";
+                        tabela.style.display = "table";
+                    }
+                })
+                .catch(error => {
+                    carregando.textContent = "Erro ao carregar dados";
+                });
+        }
+
+        function preencherTabela(periodos) {
+            const corpo = document.getElementById("tabelaCorpo");
+            corpo.innerHTML = "";
+
+            periodos.forEach(p => {
+                const linha = document.createElement("tr");
+                linha.className = p.com_filhas ? "com-filhas" : "sem-filhas";
+                linha.innerHTML = `
+                    <td>${p.numero + 1}</td>
+                    <td>${p.inicio}</td>
+                    <td>${p.fim}</td>
+                    <td>${p.status}</td>
+                `;
+                corpo.appendChild(linha);
+            });
+        }
+
+        function fecharModal() {
+            document.getElementById("modal").style.display = "none";
+        }
+
+        // Fechar modal ao clicar fora
+        window.onclick = function (event) {
+            const modal = document.getElementById("modal");
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        // Enter para verificar
+        document.getElementById("dataEvento").addEventListener("keypress", function (e) {
+            if (e.key === "Enter") verificarEvento();
+        });
+    </script>
+</body>
+</html>
