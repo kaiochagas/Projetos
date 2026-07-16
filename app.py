@@ -41,7 +41,6 @@ def verificar():
 
     sab_ref = obter_sabado(ref_date)
     sab_evento = obter_sabado(ev_date)
-
     diferenca_semanas = (sab_evento - sab_ref).days // 7
 
     inicio = sab_evento
@@ -52,18 +51,15 @@ def verificar():
             "✅ VOCÊ ESTARÁ COM SUAS FILHAS\n"
             f"Período: {format_date(inicio)} até {format_date(fim)}"
         )
-        status = 'COM AS FILHAS'
         color = 'success'
     else:
         text = (
             "❌ VOCÊ NÃO ESTARÁ COM SUAS FILHAS\n"
             f"Final de semana: {format_date(inicio)} até {format_date(fim)}"
         )
-        status = 'SEM AS FILHAS'
         color = 'danger'
 
     return jsonify({
-        'status': status,
         'text': text,
         'inicio': format_date(inicio),
         'fim': format_date(fim),
@@ -83,7 +79,6 @@ def listar():
             ref_date = datetime.today().date()
 
     sabado = obter_sabado(ref_date)
-
     items = []
     for i in range(52):
         inicio = sabado + timedelta(days=i * 7)
