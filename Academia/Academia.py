@@ -2,31 +2,90 @@ from flask import Flask, render_template_string, request, redirect
 import json
 import os
 from datetime import datetime
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
 app = Flask(__name__)
-ARQUIVO_JSON = "treinos.json"
-# Criar arquivo inicial
-if not os.path.exists(ARQUIVO_JSON):
-   dados_iniciais = {
-       "abas": [
-           {
-               "id": 1,
-               "nome": "Treino A"
-           }
-       ],
-       "treinos": []
-   }
-   with open(ARQUIVO_JSON, "w", encoding="utf-8") as f:
-       json.dump(dados_iniciais, f, ensure_ascii=False, indent=4)
 
-# Carregar dados
+# Conectar ao PostgreSQL no Render
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
+
+def init_db():
+    """Criar tabelas se não existirem"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS abas (
+            id SERIAL PRIMARY KEY,
+            nome VARCHAR(255) NOT NULL
+        )
+    """)
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS treinos (
+            id SERIAL PRIMARY KEY,
+            aba_id INTEGER NOT NULL REFERENCES abas(id) ON DELETE CASCADE,
+            nome VARCHAR(255) NOT NULL,
+            imagem TEXT,
+            series VARCHAR(255),
+            repeticoes VARCHAR(255),
+            observacoes TEXT
+        )
+    """)
+    
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS historico (
+            id SERIAL PRIMARY KEY,
+            treino_id INTEGER NOT NULL REFERENCES treinos(id) ON DELETE CASCADE,
+            data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            peso VARCHAR(255),
+            reps VARCHAR(255)
+        )
+    """)
+    
+    # Inserir aba padrão se não existir
+    cur.execute("SELECT COUNT(*) FROM abas")
+    if cur.fetchone()[0] == 0:
+        cur.execute("INSERT INTO abas (nome) VALUES (%s)", ("Treino A",))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
+# Inicializar banco
+init_db()
+
+# Carregar dados para exibição
 def carregar_dados():
-   with open(ARQUIVO_JSON, "r", encoding="utf-8") as f:
-       return json.load(f)
-
-# Salvar dados
-def salvar_dados(dados):
-   with open(ARQUIVO_JSON, "w", encoding="utf-8") as f:
-       json.dump(dados, f, ensure_ascii=False, indent=4)
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    
+    cur.execute("SELECT * FROM abas ORDER BY id")
+    abas = cur.fetchall()
+    
+    cur.execute("SELECT * FROM treinos ORDER BY id")
+    treinos = cur.fetchall()
+    
+    # Buscar histórico para cada treino
+    for treino in treinos:
+        cur.execute("""
+            SELECT data, peso, reps FROM historico 
+            WHERE treino_id = %s ORDER BY data DESC
+        """, (treino['id'],))
+        treino['historico'] = cur.fetchall()
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        "abas": abas,
+        "treinos": treinos
+    }
 
 HTML = """
 <!DOCTYPE html>
@@ -228,7 +287,7 @@ onclick="return confirm('Excluir exercício?')"
 </form>
 <h3>📈 Histórico</h3>
 {% if treino.historico %}
-   {% for item in treino.historico[::-1] %}
+   {% for item in treino.historico %}
 <div class="historico">
 <p><b>Data:</b> {{ item.data }}</p>
 <p><b>Peso:</b> {{ item.peso }}</p>
@@ -252,7 +311,7 @@ def index():
    if aba_id:
        treinos = [
            treino for treino in treinos
-           if str(treino["aba_id"]) == aba_id
+           if treino['aba_id'] == int(aba_id)
        ]
    return render_template_string(
        HTML,
@@ -260,34 +319,35 @@ def index():
        treinos=treinos
    )
 
-# Criar aba
 @app.route("/criar_aba", methods=["POST"])
 def criar_aba():
-   dados = carregar_dados()
-   novo_id = 1
-   if dados["abas"]:
-       novo_id = max(a["id"] for a in dados["abas"]) + 1
-   nova_aba = {
-       "id": novo_id,
-       "nome": request.form["nome"]
-   }
-   dados["abas"].append(nova_aba)
-   salvar_dados(dados)
+   nome = request.form["nome"]
+   conn = get_db_connection()
+   cur = conn.cursor()
+   cur.execute("INSERT INTO abas (nome) VALUES (%s)", (nome,))
+   conn.commit()
+   cur.close()
+   conn.close()
    return redirect("/")
 
-# Editar aba
 @app.route("/editar_aba/<int:id>", methods=["GET", "POST"])
 def editar_aba(id):
-   dados = carregar_dados()
-   aba = None
-   for a in dados["abas"]:
-       if a["id"] == id:
-           aba = a
-           break
+   conn = get_db_connection()
+   cur = conn.cursor(cursor_factory=RealDictCursor)
+   
    if request.method == "POST":
-       aba["nome"] = request.form["nome"]
-       salvar_dados(dados)
+       nome = request.form["nome"]
+       cur.execute("UPDATE abas SET nome = %s WHERE id = %s", (nome, id))
+       conn.commit()
+       cur.close()
+       conn.close()
        return redirect("/")
+   
+   cur.execute("SELECT * FROM abas WHERE id = %s", (id,))
+   aba = cur.fetchone()
+   cur.close()
+   conn.close()
+   
    return f"""
 <body style="background:#121212;color:white;font-family:Arial;padding:20px;">
 <h1>✏️ Editar Aba</h1>
@@ -308,85 +368,91 @@ def editar_aba(id):
 </body>
    """
 
-# Excluir aba
 @app.route("/excluir_aba/<int:id>")
 def excluir_aba(id):
-   dados = carregar_dados()
-   dados["abas"] = [
-       aba for aba in dados["abas"]
-       if aba["id"] != id
-   ]
-   dados["treinos"] = [
-       treino for treino in dados["treinos"]
-       if treino["aba_id"] != id
-   ]
-   salvar_dados(dados)
+   conn = get_db_connection()
+   cur = conn.cursor()
+   cur.execute("DELETE FROM abas WHERE id = %s", (id,))
+   conn.commit()
+   cur.close()
+   conn.close()
    return redirect("/")
 
-# Adicionar exercício
 @app.route("/adicionar", methods=["POST"])
 def adicionar():
-   dados = carregar_dados()
-   novo_id = 1
-   if dados["treinos"]:
-       novo_id = max(t["id"] for t in dados["treinos"]) + 1
-   novo = {
-       "id": novo_id,
-       "aba_id": int(request.form["aba_id"]),
-       "nome": request.form["nome"],
-       "imagem": request.form["imagem"],
-       "series": request.form["series"],
-       "repeticoes": request.form["repeticoes"],
-       "observacoes": request.form["observacoes"],
-       "historico": []
-   }
-   dados["treinos"].append(novo)
-   salvar_dados(dados)
-   return redirect("/?aba=" + request.form["aba_id"])
+   aba_id = int(request.form["aba_id"])
+   nome = request.form["nome"]
+   imagem = request.form["imagem"]
+   series = request.form["series"]
+   repeticoes = request.form["repeticoes"]
+   observacoes = request.form["observacoes"]
+   
+   conn = get_db_connection()
+   cur = conn.cursor()
+   cur.execute("""
+       INSERT INTO treinos (aba_id, nome, imagem, series, repeticoes, observacoes)
+       VALUES (%s, %s, %s, %s, %s, %s)
+   """, (aba_id, nome, imagem, series, repeticoes, observacoes))
+   conn.commit()
+   cur.close()
+   conn.close()
+   
+   return redirect(f"/?aba={aba_id}")
 
-# Registrar treino
 @app.route("/registrar/<int:id>", methods=["POST"])
 def registrar(id):
-   dados = carregar_dados()
-   for treino in dados["treinos"]:
-       if treino["id"] == id:
-           treino["historico"].append({
-               "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
-               "peso": request.form["peso"],
-               "reps": request.form["reps"]
-           })
-           break
-   salvar_dados(dados)
+   peso = request.form["peso"]
+   reps = request.form["reps"]
+   
+   conn = get_db_connection()
+   cur = conn.cursor()
+   cur.execute("""
+       INSERT INTO historico (treino_id, peso, reps)
+       VALUES (%s, %s, %s)
+   """, (id, peso, reps))
+   conn.commit()
+   cur.close()
+   conn.close()
+   
    return redirect("/")
 
-# Excluir exercício
 @app.route("/excluir/<int:id>")
 def excluir(id):
-   dados = carregar_dados()
-   dados["treinos"] = [
-       treino for treino in dados["treinos"]
-       if treino["id"] != id
-   ]
-   salvar_dados(dados)
+   conn = get_db_connection()
+   cur = conn.cursor()
+   cur.execute("DELETE FROM treinos WHERE id = %s", (id,))
+   conn.commit()
+   cur.close()
+   conn.close()
    return redirect("/")
 
-# Editar exercício
 @app.route("/editar/<int:id>", methods=["GET", "POST"])
 def editar(id):
-   dados = carregar_dados()
-   treino = None
-   for t in dados["treinos"]:
-       if t["id"] == id:
-           treino = t
-           break
+   conn = get_db_connection()
+   cur = conn.cursor(cursor_factory=RealDictCursor)
+   
    if request.method == "POST":
-       treino["nome"] = request.form["nome"]
-       treino["imagem"] = request.form["imagem"]
-       treino["series"] = request.form["series"]
-       treino["repeticoes"] = request.form["repeticoes"]
-       treino["observacoes"] = request.form["observacoes"]
-       salvar_dados(dados)
+       nome = request.form["nome"]
+       imagem = request.form["imagem"]
+       series = request.form["series"]
+       repeticoes = request.form["repeticoes"]
+       observacoes = request.form["observacoes"]
+       
+       cur.execute("""
+           UPDATE treinos 
+           SET nome = %s, imagem = %s, series = %s, repeticoes = %s, observacoes = %s
+           WHERE id = %s
+       """, (nome, imagem, series, repeticoes, observacoes, id))
+       conn.commit()
+       cur.close()
+       conn.close()
        return redirect("/")
+   
+   cur.execute("SELECT * FROM treinos WHERE id = %s", (id,))
+   treino = cur.fetchone()
+   cur.close()
+   conn.close()
+   
    return f"""
 <body style="background:#121212;color:white;font-family:Arial;padding:20px;">
 <h1>✏️ Editar Exercício</h1>
@@ -400,25 +466,25 @@ def editar(id):
 <input
            type="text"
            name="imagem"
-           value="{treino['imagem']}"
+           value="{treino['imagem'] or ''}"
            style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;"
 >
 <input
            type="text"
            name="series"
-           value="{treino['series']}"
+           value="{treino['series'] or ''}"
            style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;"
 >
 <input
            type="text"
            name="repeticoes"
-           value="{treino['repeticoes']}"
+           value="{treino['repeticoes'] or ''}"
            style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;"
 >
 <textarea
            name="observacoes"
            style="width:100%;height:100px;padding:12px;margin-top:10px;border:none;border-radius:10px;"
->{treino['observacoes']}</textarea>
+>{treino['observacoes'] or ''}</textarea>
 <button
            type="submit"
            style="width:100%;padding:12px;margin-top:10px;background:#0984e3;color:white;border:none;border-radius:10px;"
@@ -429,7 +495,6 @@ def editar(id):
 </body>
    """
 
-# Iniciar sistema
 if __name__ == "__main__":
    port = os.environ.get('PORT', 5000)
    app.run(
