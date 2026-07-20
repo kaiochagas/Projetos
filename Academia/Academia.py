@@ -213,7 +213,7 @@ onclick="return confirm('Excluir exercício?')"
 <input
        type="text"
        name="peso"
-       placeholder="Peso levantado"
+       placeholder="Último Peso levantado"
        required
 >
 <input
