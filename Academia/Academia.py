@@ -10,12 +10,7 @@ ARQUIVO_JSON = "treinos.json"
 # Criar arquivo inicial
 if not os.path.exists(ARQUIVO_JSON):
    dados_iniciais = {
-       "abas": [
-           {
-               "id": 1,
-               "nome": "Treino A"
-           }
-       ],
+       "abas": [],
        "treinos": []
    }
    with open(ARQUIVO_JSON, "w", encoding="utf-8") as f:
@@ -325,7 +320,8 @@ input[type="file"]{
 </div>
 <div class="card">
 <h2>📂 Abas</h2>
-{% for aba in abas %}
+{% if abas %}
+   {% for aba in abas %}
 <div class="aba">
 <a href="/?aba={{ aba.id }}">
        {{ aba.nome }}
@@ -342,7 +338,10 @@ input[type="file"]{
        🗑️
 </a>
 </div>
-{% endfor %}
+   {% endfor %}
+{% else %}
+<p style="color: #999;">Nenhuma aba criada. Crie uma para começar!</p>
+{% endif %}
 </div>
 <div class="card">
 <h2>➕ Adicionar Exercício</h2>
