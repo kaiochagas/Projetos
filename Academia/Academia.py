@@ -39,6 +39,12 @@ HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Meu Treino</title>
 <style>
+* {
+   margin: 0;
+   padding: 0;
+   box-sizing: border-box;
+}
+
 body{
    background:#121212;
    color:white;
@@ -67,17 +73,23 @@ textarea{
    height:100px;
 }
 button{
-   width:100%;
    padding:12px;
-   margin-top:10px;
    border:none;
    border-radius:10px;
    color:white;
    font-size:16px;
    cursor:pointer;
+   font-weight: bold;
+   transition: transform 0.2s, opacity 0.2s;
+}
+button:hover{
+   transform: translateY(-2px);
+   opacity: 0.9;
 }
 .salvar{
    background:#00b894;
+   width:100%;
+   margin-top:10px;
 }
 .editar{
    background:#0984e3;
@@ -118,30 +130,64 @@ img{
    border-radius:10px;
    margin-top:10px;
 }
-.botoes-container{
-   display:grid;
-   grid-template-columns:1fr 1fr 1fr;
-   gap:10px;
-   margin-top:10px;
+
+/* NOVO: Container responsivo para botões */
+.botoes-container {
+   display: flex;
+   flex-direction: row;
+   gap: 12px;
+   margin-top: 15px;
+   width: 100%;
 }
-.botoes-container button{
-   margin-top:0;
+
+.botao-grupo {
+   flex: 1;
+   min-width: 0;
+   display: flex;
+   align-items: stretch;
 }
+
+.botao-grupo form {
+   width: 100%;
+   display: flex;
+   margin: 0;
+}
+
+.botao-grupo button,
+.botao-grupo label {
+   flex: 1;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   height: 50px;
+   min-height: 50px;
+   padding: 0 15px;
+   font-size: 14px;
+   font-weight: bold;
+   border-radius: 10px;
+   border: none;
+   cursor: pointer;
+   transition: all 0.2s ease;
+   white-space: nowrap;
+   text-align: center;
+}
+
+.botao-grupo button:hover,
+.botao-grupo label:hover {
+   transform: translateY(-2px);
+   opacity: 0.9;
+}
+
 input[type="file"]{
    display:none;
 }
-.label-file{
-   display:block;
-   width:100%;
-   padding:12px;
-   margin-top:10px;
-   border:none;
-   border-radius:10px;
-   color:white;
-   font-size:16px;
-   cursor:pointer;
-   text-align:center;
+
+.label-file {
+   display: flex;
+   align-items: center;
+   justify-content: center;
 }
+
 .alert{
    padding:15px;
    margin:10px 0;
@@ -158,11 +204,77 @@ input[type="file"]{
    color:white;
    display:block;
 }
-@media (max-width: 768px){
-   .botoes-container{
-       grid-template-columns:1fr;
+
+/* Media Queries Responsivas */
+@media (max-width: 1024px) {
+   .botoes-container {
+       gap: 10px;
+   }
+   
+   .botao-grupo button,
+   .botao-grupo label {
+       height: 48px;
+       min-height: 48px;
+       font-size: 14px;
+       padding: 0 10px;
    }
 }
+
+@media (max-width: 768px) {
+   body {
+       margin: 15px;
+   }
+   
+   .card {
+       padding: 15px;
+       margin-bottom: 15px;
+   }
+   
+   .botoes-container {
+       flex-direction: row;
+       gap: 8px;
+   }
+   
+   .botao-grupo button,
+   .botao-grupo label {
+       height: 46px;
+       min-height: 46px;
+       font-size: 13px;
+       padding: 0 8px;
+   }
+}
+
+@media (max-width: 480px) {
+   body {
+       margin: 10px;
+   }
+   
+   .card {
+       padding: 12px;
+   }
+   
+   .botoes-container {
+       flex-direction: column;
+       gap: 10px;
+   }
+   
+   .botao-grupo {
+       width: 100%;
+   }
+   
+   .botao-grupo button,
+   .botao-grupo label {
+       height: 50px;
+       min-height: 50px;
+       font-size: 14px;
+       padding: 0 12px;
+   }
+   
+   input, textarea, select {
+       font-size: 16px;
+   }
+}
+
 </style>
 </head>
 <body>
@@ -177,17 +289,23 @@ input[type="file"]{
 <div class="card">
 <h2>⚙️ Gerenciamento de Dados</h2>
 <div class="botoes-container">
-   <form action="/exportar" method="GET" style="margin:0;">
-       <button class="exportar" type="submit">📤 Exportar JSON</button>
-   </form>
-   <form action="/importar" method="POST" enctype="multipart/form-data" style="margin:0;">
-       <label class="label-file importar" for="arquivo_importar">📥 Importar JSON</label>
-       <input type="file" id="arquivo_importar" name="arquivo" accept=".json" onchange="this.form.submit()">
-   </form>
-   <form action="/mesclar" method="POST" enctype="multipart/form-data" style="margin:0;">
-       <label class="label-file mesclar" for="arquivo_mesclar">🔀 Importar e Mesclar</label>
-       <input type="file" id="arquivo_mesclar" name="arquivo" accept=".json" onchange="this.form.submit()">
-   </form>
+   <div class="botao-grupo">
+       <form action="/exportar" method="GET" style="margin:0; width: 100%;">
+           <button class="exportar" type="submit">📤 Exportar JSON</button>
+       </form>
+   </div>
+   <div class="botao-grupo">
+       <form action="/importar" method="POST" enctype="multipart/form-data" style="margin:0; width: 100%;">
+           <label class="label-file importar" for="arquivo_importar">📥 Importar JSON</label>
+           <input type="file" id="arquivo_importar" name="arquivo" accept=".json" onchange="this.form.submit()">
+       </form>
+   </div>
+   <div class="botao-grupo">
+       <form action="/mesclar" method="POST" enctype="multipart/form-data" style="margin:0; width: 100%;">
+           <label class="label-file mesclar" for="arquivo_mesclar">🔀 Mesclar JSON</label>
+           <input type="file" id="arquivo_mesclar" name="arquivo" accept=".json" onchange="this.form.submit()">
+       </form>
+   </div>
 </div>
 </div>
 
