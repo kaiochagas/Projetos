@@ -1,9 +1,12 @@
-from flask import Flask, render_template_string, request, redirect
+from flask import Flask, render_template_string, request, redirect, send_file, jsonify
 import json
 import os
 from datetime import datetime
+from io import BytesIO
+
 app = Flask(__name__)
 ARQUIVO_JSON = "treinos.json"
+
 # Criar arquivo inicial
 if not os.path.exists(ARQUIVO_JSON):
    dados_iniciais = {
@@ -82,6 +85,16 @@ button{
 .excluir{
    background:#d63031;
 }
+.exportar{
+   background:#6c5ce7;
+}
+.importar{
+   background:#fd79a8;
+}
+.mesclar{
+   background:#fdcb6e;
+   color:#000;
+}
 .aba{
    display:inline-block;
    background:#2d3436;
@@ -105,10 +118,79 @@ img{
    border-radius:10px;
    margin-top:10px;
 }
+.botoes-container{
+   display:grid;
+   grid-template-columns:1fr 1fr 1fr;
+   gap:10px;
+   margin-top:10px;
+}
+.botoes-container button{
+   margin-top:0;
+}
+input[type="file"]{
+   display:none;
+}
+.label-file{
+   display:block;
+   width:100%;
+   padding:12px;
+   margin-top:10px;
+   border:none;
+   border-radius:10px;
+   color:white;
+   font-size:16px;
+   cursor:pointer;
+   text-align:center;
+}
+.alert{
+   padding:15px;
+   margin:10px 0;
+   border-radius:10px;
+   display:none;
+}
+.alert.sucesso{
+   background:#00b894;
+   color:white;
+   display:block;
+}
+.alert.erro{
+   background:#d63031;
+   color:white;
+   display:block;
+}
+@media (max-width: 768px){
+   .botoes-container{
+       grid-template-columns:1fr;
+   }
+}
 </style>
 </head>
 <body>
+{% if mensagem %}
+<div class="alert {% if tipo_mensagem == 'sucesso' %}sucesso{% else %}erro{% endif %}">
+   {{ mensagem }}
+</div>
+{% endif %}
+
 <h1>🏋️ Meu Treino</h1>
+
+<div class="card">
+<h2>⚙️ Gerenciamento de Dados</h2>
+<div class="botoes-container">
+   <form action="/exportar" method="GET" style="margin:0;">
+       <button class="exportar" type="submit">📤 Exportar JSON</button>
+   </form>
+   <form action="/importar" method="POST" enctype="multipart/form-data" style="margin:0;">
+       <label class="label-file importar" for="arquivo_importar">📥 Importar JSON</label>
+       <input type="file" id="arquivo_importar" name="arquivo" accept=".json" onchange="this.form.submit()">
+   </form>
+   <form action="/mesclar" method="POST" enctype="multipart/form-data" style="margin:0;">
+       <label class="label-file mesclar" for="arquivo_mesclar">🔀 Importar e Mesclar</label>
+       <input type="file" id="arquivo_mesclar" name="arquivo" accept=".json" onchange="this.form.submit()">
+   </form>
+</div>
+</div>
+
 <div class="card">
 <h2>➕ Criar Aba</h2>
 <form action="/criar_aba" method="POST">
@@ -249,16 +331,111 @@ def index():
    dados = carregar_dados()
    aba_id = request.args.get("aba")
    treinos = dados["treinos"]
+   mensagem = request.args.get("mensagem", "")
+   tipo_mensagem = request.args.get("tipo", "")
+   
    if aba_id:
        treinos = [
            treino for treino in treinos
            if str(treino["aba_id"]) == aba_id
        ]
+   
    return render_template_string(
        HTML,
        abas=dados["abas"],
-       treinos=treinos
+       treinos=treinos,
+       mensagem=mensagem,
+       tipo_mensagem=tipo_mensagem
    )
+
+# Exportar JSON
+@app.route("/exportar", methods=["GET"])
+def exportar():
+   try:
+       dados = carregar_dados()
+       json_str = json.dumps(dados, ensure_ascii=False, indent=4)
+       buffer = BytesIO(json_str.encode('utf-8'))
+       return send_file(
+           buffer,
+           mimetype='application/json',
+           as_attachment=True,
+           download_name='treinos.json'
+       )
+   except Exception as e:
+       return redirect(f"/?mensagem=Erro ao exportar: {str(e)}&tipo=erro")
+
+# Importar JSON (substituir)
+@app.route("/importar", methods=["POST"])
+def importar():
+   try:
+       if 'arquivo' not in request.files:
+           return redirect("/?mensagem=Nenhum arquivo selecionado&tipo=erro")
+       
+       arquivo = request.files['arquivo']
+       
+       if arquivo.filename == '':
+           return redirect("/?mensagem=Nenhum arquivo selecionado&tipo=erro")
+       
+       # Validar se é JSON
+       try:
+           conteudo = json.loads(arquivo.read().decode('utf-8'))
+       except json.JSONDecodeError:
+           return redirect("/?mensagem=Arquivo JSON inválido&tipo=erro")
+       
+       # Validar estrutura básica
+       if 'abas' not in conteudo or 'treinos' not in conteudo:
+           return redirect("/?mensagem=Estrutura de JSON inválida. Deve conter 'abas' e 'treinos'&tipo=erro")
+       
+       # Salvar dados
+       salvar_dados(conteudo)
+       return redirect("/?mensagem=Dados importados com sucesso! (Substituído)&tipo=sucesso")
+       
+   except Exception as e:
+       return redirect(f"/?mensagem=Erro ao importar: {str(e)}&tipo=erro")
+
+# Mesclar JSON
+@app.route("/mesclar", methods=["POST"])
+def mesclar():
+   try:
+       if 'arquivo' not in request.files:
+           return redirect("/?mensagem=Nenhum arquivo selecionado&tipo=erro")
+       
+       arquivo = request.files['arquivo']
+       
+       if arquivo.filename == '':
+           return redirect("/?mensagem=Nenhum arquivo selecionado&tipo=erro")
+       
+       # Validar se é JSON
+       try:
+           conteudo_novo = json.loads(arquivo.read().decode('utf-8'))
+       except json.JSONDecodeError:
+           return redirect("/?mensagem=Arquivo JSON inválido&tipo=erro")
+       
+       # Validar estrutura básica
+       if 'abas' not in conteudo_novo or 'treinos' not in conteudo_novo:
+           return redirect("/?mensagem=Estrutura de JSON inválida. Deve conter 'abas' e 'treinos'&tipo=erro")
+       
+       # Carregar dados atuais
+       dados_atuais = carregar_dados()
+       
+       # Mesclar abas (sem duplicatas por ID)
+       ids_abas_atuais = {aba['id'] for aba in dados_atuais['abas']}
+       for aba_nova in conteudo_novo['abas']:
+           if aba_nova['id'] not in ids_abas_atuais:
+               dados_atuais['abas'].append(aba_nova)
+       
+       # Mesclar treinos (sem duplicatas por ID)
+       ids_treinos_atuais = {treino['id'] for treino in dados_atuais['treinos']}
+       for treino_novo in conteudo_novo['treinos']:
+           if treino_novo['id'] not in ids_treinos_atuais:
+               dados_atuais['treinos'].append(treino_novo)
+       
+       # Salvar dados mesclados
+       salvar_dados(dados_atuais)
+       return redirect("/?mensagem=Dados mesclados com sucesso!&tipo=sucesso")
+       
+   except Exception as e:
+       return redirect(f"/?mensagem=Erro ao mesclar: {str(e)}&tipo=erro")
 
 # Criar aba
 @app.route("/criar_aba", methods=["POST"])
