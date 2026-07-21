@@ -286,18 +286,18 @@ input[type="file"]{
 <div class="botoes-container">
    <div class="botao-grupo">
        <form action="/exportar" method="GET" style="margin:0; width: 100%;">
-           <button class="exportar" type="submit">📤 Exportar JSON</button>
+           <button class="exportar" type="submit">📤 Exportar Treino</button>
        </form>
    </div>
    <div class="botao-grupo">
        <form action="/importar" method="POST" enctype="multipart/form-data" style="margin:0; width: 100%;">
-           <label class="label-file importar" for="arquivo_importar">📥 Importar JSON</label>
+           <label class="label-file importar" for="arquivo_importar">📥 Importar Treino</label>
            <input type="file" id="arquivo_importar" name="arquivo" accept=".json" onchange="this.form.submit()">
        </form>
    </div>
    <div class="botao-grupo">
        <form action="/mesclar" method="POST" enctype="multipart/form-data" style="margin:0; width: 100%;">
-           <label class="label-file mesclar" for="arquivo_mesclar">🔀 Mesclar JSON</label>
+           <label class="label-file mesclar" for="arquivo_mesclar">🔀 Mesclar Treino</label>
            <input type="file" id="arquivo_mesclar" name="arquivo" accept=".json" onchange="this.form.submit()">
        </form>
    </div>
