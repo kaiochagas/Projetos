@@ -180,28 +180,46 @@ body{background:var(--bg);color:var(--text);display:flex;align-items:center;just
 .logo{font-size:30px;line-height:1;display:flex;align-items:center}
 .title{font-weight:800;font-size:22px}
 .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-/* Buttons in header: fixed height, centered vertically */
-.action-btn, .btn-theme, .actions label.action-btn {
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  height:36px;
-  padding:0 14px;
-  border-radius:8px;
-  color:#fff;
-  text-decoration:none;
-  border:none;
-  cursor:pointer;
-  font-weight:700;
-  font-size:14px;
-  line-height:1;
+
+/* Enforce consistent sizing/alignment for header controls */
+.action-btn, .btn-theme, .actions label.action-btn,
+.actions a.action-btn, .actions button.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;            /* same height */
+  min-width: 84px;
+  padding: 0 14px;
+  border-radius: 8px;
+  color: #fff;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  box-sizing: border-box;
+  vertical-align: middle;
 }
+
+/* ensure any direct child behaves as intended */
+.actions > * {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+}
+
 /* color variants */
 .btn-voltar{background:var(--btn-voltar); color:#fff}
 .btn-export{background:var(--btn-export); color:#fff}
 .btn-import{background:var(--btn-import); color:#fff}
 .btn-merge{background:var(--btn-merge); color:#fff}
-.btn-theme{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.06);padding:0 12px;}
+.btn-theme{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.06);padding:0 12px; height:40px;}
+
+/* hide native file input */
+.actions input[type="file"] { display: none; }
+
 .form{max-width:780px;margin:0 auto}
 .field{margin-bottom:12px}
 label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
@@ -221,6 +239,8 @@ button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(25
 .aba a{color:inherit;text-decoration:none}
 .historico{background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;margin-top:10px}
 img{max-width:100%;border-radius:10px;margin-top:10px}
+.action-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,0.18); transition: all 120ms ease; }
+
 @media (max-width:720px){.header{flex-direction:column;align-items:flex-start}.title{font-size:18px}.logo{font-size:26px}}
 </style>
 
