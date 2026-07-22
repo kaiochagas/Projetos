@@ -1,4 +1,292 @@
 {
-    "abas": [],
-    "treinos": []
+    "abas": [
+        {
+            "id": 2,
+            "nome": "Treino A – Peito, Ombros e Tríceps"
+        },
+        {
+            "id": 3,
+            "nome": "Treino B – Costas e Bíceps"
+        },
+        {
+            "id": 4,
+            "nome": "Treino C – Pernas"
+        },
+        {
+            "id": 5,
+            "nome": "Treino D – Cardio + Abdômen"
+        }
+    ],
+    "treinos": [
+        {
+            "id": 1,
+            "aba_id": 2,
+            "nome": "Supino reto",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2014/01/supino-reto.jpg",
+            "series": "4",
+            "repeticoes": "8–12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 2,
+            "aba_id": 2,
+            "nome": "Supino inclinado",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2016/10/supino-inclinado-como-fazer-musculos.jpg",
+            "series": "3",
+            "repeticoes": "8–12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 3,
+            "aba_id": 2,
+            "nome": "Crucifixo",
+            "imagem": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS8j_SD7Kiv-uCjDAL17w5mOZ6Eqz2FMK0U2B7EDQSWSxPVFm0Q6f8AvD_B&s=10",
+            "series": "3",
+            "repeticoes": "10–15",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 4,
+            "aba_id": 2,
+            "nome": "Desenvolvimento de ombros",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2014/02/desenvolvimento-militar-musculos-execucao.jpg",
+            "series": "3",
+            "repeticoes": "8–12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 5,
+            "aba_id": 2,
+            "nome": "Elevação lateral",
+            "imagem": "https://grandeatleta.com.br/blog/wp-content/uploads/2020/01/elevacao-lateral.jpg.webp",
+            "series": "3",
+            "repeticoes": "12-15",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 6,
+            "aba_id": 2,
+            "nome": "Tríceps pulley",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2017/09/tricepes-pulley-corda-polia--scaled.jpg",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 7,
+            "aba_id": 2,
+            "nome": "Tríceps francês",
+            "imagem": "https://grandeatleta.com.br/wp-content/uploads/2019/11/triceps-frances-corda-polia.jpg",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 8,
+            "aba_id": 2,
+            "nome": "Tríceps testa",
+            "imagem": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRag4V6PjGPxl7PiWyWiC9oMUZ8DxSfea6zCj4GSEMdeC9ZQ7ZZ1sVfD_U&s=10",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 9,
+            "aba_id": 3,
+            "nome": "Puxada frontal",
+            "imagem": "https://grandeatleta.com.br/blog/wp-content/uploads/2022/10/puxada-aberta-frente-polia-pulley-1024x597.jpg.webp",
+            "series": "4",
+            "repeticoes": "8–12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 10,
+            "aba_id": 3,
+            "nome": "Remada curvada",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2017/07/remada-curvada-musculos-trabalhados.jpg",
+            "series": "4",
+            "repeticoes": "8–12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 11,
+            "aba_id": 3,
+            "nome": "Remada baixa",
+            "imagem": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTrG2Z-3N-d-EY-kMaOltsYpcTXYLD8QlvREtR_LewsXJ4kiceFqoWSo7Wc&s=10",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 12,
+            "aba_id": 3,
+            "nome": "Pulldown",
+            "imagem": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRIvD8SktOa0jjdS1RNsE3zMPgzssrfpjT0UxuwTClWEa2-tRppxJk612c&s=10",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 13,
+            "aba_id": 3,
+            "nome": "Rosca direta",
+            "imagem": "https://static1.minhavida.com.br/articles/28/af/90/ef/65ef2fafd8480cdibqbudriorcr3wdflcvylxsylx3bo-65eivbmdzes-kzmnxjxs-enswzgv0ycxejtiworoosmdjtfhryeoittuobpp-0dcd9uy5ict6-wn0scgyzcer4dh5-utdyttssmhcptipfb2gpyqamxafsu-orig-1-orig-1.",
+            "series": "3",
+            "repeticoes": "8–12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 14,
+            "aba_id": 3,
+            "nome": "Rosca Scott",
+            "imagem": "https://static1.minhavida.com.br/articles/a0/79/bd/2f/makatserchykshutterstock-orig-1.jpg",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 15,
+            "aba_id": 3,
+            "nome": "Rosca martelo",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2017/12/Rosca-Martelo.jpg",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 16,
+            "aba_id": 4,
+            "nome": "Agachamento livre",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2016/04/tipos-de-agachamento-e-execucao-correta.jpg",
+            "series": "4",
+            "repeticoes": "8–12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 17,
+            "aba_id": 4,
+            "nome": "Leg Press",
+            "imagem": "https://www.lyfta.app/thumbnails/14631201.jpg",
+            "series": "4",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 18,
+            "aba_id": 4,
+            "nome": "Cadeira extensora",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2016/08/cadeira-extensora-cp.jpg",
+            "series": "3",
+            "repeticoes": "12-15",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 19,
+            "aba_id": 4,
+            "nome": "Mesa flexora",
+            "imagem": "https://treinomestre.com.br/wp-content/uploads/2023/11/mesa-flexora-romana.jpg",
+            "series": "3",
+            "repeticoes": "12-15",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 20,
+            "aba_id": 4,
+            "nome": "Stiff",
+            "imagem": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQeQNjzFeF2bt25-5I5FGPpGa3e9ie_l_APuwVBJOusH7wsu6rU9_fok2A&s=10",
+            "series": "3",
+            "repeticoes": "10-12",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 21,
+            "aba_id": 4,
+            "nome": "Panturrilha em pé",
+            "imagem": "https://i0.wp.com/meutreinador.com/wp-content/uploads/2023/11/97_Elevacao-de-calcanhares-em-pe-com-halteres-alternada.jpg?fit=490%2C393&ssl=1",
+            "series": "4",
+            "repeticoes": "15-20",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 22,
+            "aba_id": 5,
+            "nome": "Caminhada inclinada (6%–10%, 5,5–6,5 km/h)",
+            "imagem": "https://www.lyfta.app/thumbnails/36661201.jpg",
+            "series": "",
+            "repeticoes": "35–45 min",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 23,
+            "aba_id": 5,
+            "nome": "Corrida leve (8–10 km/h)",
+            "imagem": "https://grandeatleta.com.br/wp-content/uploads/2018/08/esteira.jpg",
+            "series": "",
+            "repeticoes": "25–35 min",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 24,
+            "aba_id": 5,
+            "nome": "HIIT (2 min caminhada + 1 min corrida)",
+            "imagem": "https://grandeatleta.com.br/wp-content/uploads/2018/08/esteira.jpg",
+            "series": "",
+            "repeticoes": "20 min",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 25,
+            "aba_id": 5,
+            "nome": "Abdominal máquina",
+            "imagem": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSLEAP_rQp4u0kn31W1ongYwd0dNIDuEX0sp6GD67BD5fYJCRyzX3QyGa8&s=10",
+            "series": "3",
+            "repeticoes": "12-15",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 26,
+            "aba_id": 5,
+            "nome": "Elevação de pernas",
+            "imagem": "https://www.lyfta.app/_next/image?url=%2Fthumbnails%2F08261201.jpg&w=3840&q=75",
+            "series": "3",
+            "repeticoes": "12-15",
+            "observacoes": "",
+            "historico": []
+        },
+        {
+            "id": 27,
+            "aba_id": 5,
+            "nome": "Abdominal infra no banco",
+            "imagem": "https://www.mundoboaforma.com.br/wp-content/uploads/2021/04/abdominal-elevacao-de-pernas-no-banco.gif",
+            "series": "3",
+            "repeticoes": "15",
+            "observacoes": "",
+            "historico": []
+        }
+    ]
 }
