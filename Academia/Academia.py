@@ -1,24 +1,24 @@
 # app.py
 """
-Aplicação Flask completa com:
+Aplicação Flask completa (único arquivo) com:
 - Autenticação (werkzeug.security)
 - Admin automático Kaio.chagas (senha wk22z*Ox06)
 - Persistência local: usuarios.json e usuarios/<login>.json
 - Painel admin com CRUD de usuários e treinos
-- Criar Treino com opção de criar Aba
+- Criar Treino com opção de criar Aba (AJAX) + campo URL de imagem
 - Exportar / Importar / Mesclar (merge) de JSON de treinos
 - Layout responsivo, tema claro/escuro, emoji de academia
+- Ajustes visuais nos botões do cabeçalho (cores/tamanhos/alinhamento)
 """
 
-from flask import Flask, request, redirect, session, send_file, render_template_string, url_for
-import os, json
+from flask import Flask, render_template_string, request, redirect, session, send_file, url_for, jsonify
+import os, json, copy
 from datetime import datetime
 from io import BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-import copy
 
-# Config
+# ------------- Config -------------
 APP_SECRET = os.environ.get("SECRET_KEY", "sua-chave-secreta-aqui")
 USUARIOS_JSON = "usuarios.json"
 USUARIOS_DIR = "usuarios"
@@ -32,7 +32,7 @@ os.makedirs(USUARIOS_DIR, exist_ok=True)
 app = Flask(__name__)
 app.secret_key = APP_SECRET
 
-# Utilities
+# ------------- Utilities -------------
 def now_iso():
     return datetime.utcnow().isoformat() + "Z"
 
@@ -56,7 +56,7 @@ def user_data_path(login):
     safe = login.replace("/", "_")
     return os.path.join(os.getcwd(), USUARIOS_DIR, f"{safe}.json")
 
-# Storage functions
+# ------------- Storage functions -------------
 def carregar_usuarios():
     data = load_json_file(usuarios_path())
     return data or {}
@@ -75,7 +75,7 @@ def salvar_dados_usuario(login, dados):
     p = user_data_path(login)
     save_json_file(p, dados)
 
-# Ensure admin exists
+# ------------- Ensure admin exists -------------
 def ensure_admin_exists():
     users = carregar_usuarios()
     if ADMIN_LOGIN in users:
@@ -103,7 +103,7 @@ def ensure_admin_exists():
 
 ensure_admin_exists()
 
-# Decorators
+# ------------- Decorators -------------
 def admin_required(f):
     @wraps(f)
     def wrapped(*args, **kwargs):
@@ -116,13 +116,13 @@ def admin_required(f):
         return f(*args, **kwargs)
     return wrapped
 
-# Merge helper: merges incoming into existing; returns merged dict
+# ------------- Merge helper -------------
 def merge_dados(existing, incoming):
     existing = copy.deepcopy(existing)
     inc_abas = incoming.get("abas", []) or []
     inc_treinos = incoming.get("treinos", []) or []
 
-    # Prepare mapping by aba name (case-insensitive)
+    # mapping by aba name (case-insensitive)
     name_to_id = { (a.get("nome","").strip().lower()): a.get("id") for a in existing.get("abas", []) if a.get("nome") }
     existing_aba_ids = [a.get("id",0) for a in existing.get("abas",[])]
     next_aba_id = (max(existing_aba_ids) + 1) if existing_aba_ids else 1
@@ -138,13 +138,10 @@ def merge_dados(existing, incoming):
         else:
             new_id = next_aba_id
             next_aba_id += 1
-            if "abas" not in existing:
-                existing["abas"] = []
-            existing["abas"].append({"id": new_id, "nome": name})
+            existing.setdefault("abas", []).append({"id": new_id, "nome": name})
             name_to_id[nl] = new_id
             map_old_to_new[a.get("id")] = new_id
 
-    # Prepare treino ids
     existing_treino_ids = [t.get("id",0) for t in existing.get("treinos",[])]
     next_treino_id = (max(existing_treino_ids)+1) if existing_treino_ids else 1
 
@@ -156,40 +153,48 @@ def merge_dados(existing, incoming):
         if old_aba in map_old_to_new:
             new["aba_id"] = map_old_to_new[old_aba]
         else:
-            # if aba id not found, try match by name if ada
             new["aba_id"] = int(new.get("aba_id") or 0)
         existing.setdefault("treinos", []).append(new)
 
     return existing
 
-# Shared head for templates
+# ------------- Shared head (styles + theme) -------------
 SHARED_HEAD = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{
-  --bg: #121212; --card:#1e1e1e; --text:#fff; --accent:#667eea; --muted:#999; --danger:#e74c3c;
+  --bg: #121212; --card:#1e1e1e; --text:#fff; --accent:#7c5cff; --muted:#9aa0a6; --danger:#e74c3c;
 }
-:root.light{ --bg:#f5f6fb; --card:#fff; --text:#111; --accent:#4f46e5; --muted:#666; --danger:#c0392b; }
+:root.light{ --bg:#f5f6fb; --card:#fff; --text:#111827; --accent:#4f46e5; --muted:#666; --danger:#c0392b; }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Helvetica Neue", Arial;}
 body{background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;padding:20px;}
-.container{width:100%;max-width:980px;margin:0 auto;}
-.center-card{background:var(--card);padding:24px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,0.25);}
-.header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.container{width:100%;max-width:1100px;margin:0 auto;}
+.center-card{background:var(--card);padding:24px;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,0.35);}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:12px}
-.logo{font-size:28px;line-height:1;display:flex;align-items:center}
-.title{font-weight:800;font-size:20px}
-.actions{display:flex;align-items:center;gap:8px}
-.form{max-width:720px;margin:0 auto}
+.logo{font-size:30px;line-height:1;display:flex;align-items:center}
+.title{font-weight:800;font-size:22px}
+.actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.actions a, .actions label, .actions button{ color:var(--accent); text-decoration:none; font-weight:600; font-size:14px; }
+.form{max-width:780px;margin:0 auto}
 .field{margin-bottom:12px}
 label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
-input[type="text"],input[type="password"],input[type="number"],textarea,select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)}
-button.btn{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600}
-button.ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;cursor:pointer}
+input[type="text"],input[type="password"],input[type="number"],textarea,select{
+  width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)
+}
+textarea{resize:vertical;min-height:100px}
+button.btn{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:700}
+button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.04);padding:8px 12px;border-radius:8px;cursor:pointer}
 .small{padding:6px 10px;font-size:14px}
-.footer-note{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
-@media (max-width:600px){.header{flex-direction:column;align-items:flex-start}.title{font-size:18px}.logo{font-size:24px}.form{padding:0 10px}}
+.card{background:transparent;padding:20px;border-radius:12px;margin-bottom:20px;border:1px solid rgba(255,255,255,0.03)}
+.aba{display:inline-block;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;margin-right:10px;margin-bottom:10px}
+.aba a{color:var(--text);text-decoration:none}
+.historico{background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;margin-top:10px}
+img{max-width:100%;border-radius:10px;margin-top:10px}
+@media (max-width:720px){.header{flex-direction:column;align-items:flex-start}.title{font-size:18px}.logo{font-size:26px}}
 </style>
+
 <script>
 function initThemeToggle(){
   const root = document.documentElement;
@@ -207,20 +212,27 @@ document.addEventListener('DOMContentLoaded', initThemeToggle);
 </script>
 """
 
-# Templates (updated with export/import/merge and create-aba option)
+# ------------- Templates (all inline) -------------
 LOGIN_HTML = SHARED_HEAD + """
 <div class="container"><div class="center-card">
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Acesse sua rotina</div></div></div>
-    <div class="actions"><button class="ghost small" data-toggle-theme>Alternar Tema</button></div>
+    <div class="actions">
+      <a class="ghost small" href="/">Voltar</a>
+      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+    </div>
   </div>
+
   <div class="form">
     <h2 style="margin-top:0">Entrar</h2>
-    {% if mensagem %}<div style="background:rgba(255,0,0,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
+    {% if mensagem %}<div style="background:rgba(231,76,60,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
     <form method="post" action="{{ url_for('login') }}">
       <div class="field"><label for="usuario">Usuário:</label><input id="usuario" type="text" name="usuario" required></div>
       <div class="field"><label for="senha">Senha:</label><input id="senha" type="password" name="senha" required></div>
-      <div style="display:flex;gap:10px;align-items:center"><button class="btn" type="submit">Entrar</button><a href="{{ url_for('registrar') }}" class="ghost small" style="text-decoration:none">Criar conta</a></div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn" type="submit">Entrar</button>
+        <a class="ghost small" href="{{ url_for('registrar') }}">Criar conta</a>
+      </div>
     </form>
   </div>
 </div></div>
@@ -230,35 +242,54 @@ REGISTRO_HTML = SHARED_HEAD + """
 <div class="container"><div class="center-card">
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Crie sua conta</div></div></div>
-    <div class="actions"><button class="ghost small" data-toggle-theme>Alternar Tema</button></div>
+    <div class="actions">
+      <a class="ghost small" href="/">Voltar</a>
+      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+    </div>
   </div>
+
   <div class="form">
     <h2 style="margin-top:0">Registrar</h2>
-    {% if mensagem %}<div style="background:rgba(255,0,0,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
+    {% if mensagem %}<div style="background:rgba(231,76,60,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
     <form method="post" action="{{ url_for('registrar') }}">
       <div class="field"><label for="nome">Nome:</label><input id="nome" type="text" name="nome" required></div>
       <div class="field"><label for="sobrenome">Sobrenome:</label><input id="sobrenome" type="text" name="sobrenome" required></div>
       <div class="field"><label for="senha">Senha:</label><input id="senha" type="password" name="senha" required placeholder="Crie uma senha segura"></div>
       <div class="field"><label for="confirmar_senha">Confirmar senha:</label><input id="confirmar_senha" type="password" name="confirmar_senha" required placeholder="Repita a senha"></div>
-      <div style="display:flex;gap:10px;align-items:center"><button class="btn" type="submit">Criar Conta</button><a href="{{ url_for('login') }}" class="ghost small" style="text-decoration:none">Voltar ao Login</a></div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <button class="btn" type="submit">Criar Conta</button>
+        <a class="ghost small" href="{{ url_for('login') }}">Voltar ao Login</a>
+      </div>
     </form>
   </div>
 </div></div>
 """
 
-# Main page: include export/import/merge and link to criar treino
 MAIN_HTML = SHARED_HEAD + """
 <div class="container"><div class="center-card">
   <div class="header">
-    <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Bem-vindo(a)</div></div></div>
+    <div class="brand">
+      <div class="logo">🏋️</div>
+      <div>
+        <div class="title">Meu Treino</div>
+        <div style="font-size:13px;color:var(--muted)">Bem-vindo(a)</div>
+      </div>
+    </div>
+
     <div class="actions">
       <a class="ghost small" href="{{ url_for('criar_treino') }}">Criar Treino</a>
       <a class="ghost small" href="{{ url_for('exportar') }}">Exportar</a>
       <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Importar</label>
+        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+          <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
+          Importar
+        </label>
       </form>
       <form method="post" action="{{ url_for('mesclar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Mesclar</label>
+        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+          <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
+          Mesclar
+        </label>
       </form>
       <a class="ghost small" href="{{ url_for('logout') }}">Sair</a>
       {% if is_admin %}<a class="btn small" href="{{ url_for('admin_dashboard') }}">Admin</a>{% endif %}
@@ -266,7 +297,7 @@ MAIN_HTML = SHARED_HEAD + """
     </div>
   </div>
 
-  {% if mensagem %}<div style="background:rgba(0,255,0,0.06);padding:10px;border-radius:8px;color:var(--accent);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
+  {% if mensagem %}<div style="background:rgba(124,92,255,0.08);padding:10px;border-radius:8px;color:var(--accent);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
 
   <section style="display:flex;gap:20px;flex-wrap:wrap">
     <div style="flex:1;min-width:260px">
@@ -286,6 +317,9 @@ MAIN_HTML = SHARED_HEAD + """
                 <a class="ghost small" href="{{ url_for('excluir', id=t.id) }}" onclick="return confirm('Excluir exercício?')">Excluir</a>
               </div>
             </div>
+            {% if t.imagem %}
+              <img src="{{ t.imagem }}" alt="{{ t.nome }}" style="margin-top:10px;border-radius:8px;max-height:220px;object-fit:cover;">
+            {% endif %}
             <p style="margin:6px 0;color:var(--muted)">Séries: {{ t.series }} — Repetições: {{ t.repeticoes }}</p>
             <p style="margin:6px 0;color:var(--muted)">{{ t.observacoes }}</p>
             <div>
@@ -302,23 +336,41 @@ MAIN_HTML = SHARED_HEAD + """
 </div></div>
 """
 
-# Create Treino page for user
 CREATE_TREINO_HTML = SHARED_HEAD + """
 <div class="container"><div class="center-card">
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">Criar Treino</div><div style="font-size:13px;color:var(--muted)">{{ usuario }}</div></div></div>
     <div class="actions">
       <a class="ghost small" href="{{ url_for('index') }}">Voltar</a>
+      <a class="ghost small" href="{{ url_for('exportar') }}">Exportar</a>
+      <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" style="display:inline">
+        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+          <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
+          Importar
+        </label>
+      </form>
+      <form method="post" action="{{ url_for('mesclar') }}" enctype="multipart/form-data" style="display:inline">
+        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+          <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
+          Mesclar
+        </label>
+      </form>
       <button class="ghost small" data-toggle-theme>Alternar Tema</button>
     </div>
   </div>
 
-  <form method="post" action="{{ url_for('criar_treino') }}" style="max-width:720px">
-    <div class="field"><label>Nome:</label><input name="nome" required></div>
+  <form method="post" action="{{ url_for('criar_treino') }}" style="max-width:720px" id="criar-treino-form">
+    <h3 style="margin-top:0">Criar aba de treino</h3>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <input id="novaAbaNome" type="text" placeholder="Nome da nova aba (ex: Treino B)" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)">
+      <button type="button" id="criarAbaBtn" class="ghost small">OK</button>
+    </div>
+
+    <div class="field"><label>Nome do treino:</label><input name="nome" required></div>
 
     <div class="field">
-      <label>Aba existente:</label>
-      <select name="aba_id">
+      <label>Selecionar Aba:</label>
+      <select name="aba_id" id="abaSelect">
         <option value="">-- Selecionar aba --</option>
         {% for aba in abas %}
           <option value="{{ aba.id }}">{{ aba.nome }}</option>
@@ -326,10 +378,7 @@ CREATE_TREINO_HTML = SHARED_HEAD + """
       </select>
     </div>
 
-    <div class="field">
-      <label>Ou criar nova aba (nome):</label>
-      <input name="nova_aba" placeholder="Ex: Treino A (deixe vazio se não criar)">
-    </div>
+    <div class="field"><label>URL da imagem (opcional):</label><input name="imagem" placeholder="https://exemplo.com/imagem.jpg"></div>
 
     <div class="field"><label>Séries:</label><input name="series"></div>
     <div class="field"><label>Repetições:</label><input name="repeticoes"></div>
@@ -341,23 +390,37 @@ CREATE_TREINO_HTML = SHARED_HEAD + """
     </div>
   </form>
 
-  <div style="margin-top:16px">
-    <h4>Importar / Mesclar</h4>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="ghost small" href="{{ url_for('exportar') }}">Exportar meus treinos</a>
-      <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Importar (substituir)</label>
-      </form>
-      <form method="post" action="{{ url_for('mesclar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Mesclar</label>
-      </form>
-    </div>
-  </div>
+  <script>
+  document.addEventListener('DOMContentLoaded', function(){
+    const btn = document.getElementById('criarAbaBtn');
+    btn.addEventListener('click', async function(){
+      const nome = document.getElementById('novaAbaNome').value.trim();
+      if(!nome){ alert('Informe o nome da aba'); return; }
+      try{
+        const res = await fetch('{{ url_for("criar_aba_ajax") }}', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ nome })
+        });
+        if(!res.ok){ const t = await res.text(); alert('Erro: '+t); return; }
+        const aba = await res.json();
+        const select = document.getElementById('abaSelect');
+        const opt = document.createElement('option');
+        opt.value = aba.id;
+        opt.text = aba.nome;
+        select.appendChild(opt);
+        select.value = aba.id;
+        document.getElementById('novaAbaNome').value = '';
+      }catch(e){
+        alert('Erro ao criar aba');
+      }
+    });
+  });
+  </script>
 
 </div></div>
 """
 
-# Admin templates reuse previous ones but admin_ver_treinos will include import/merge/export for target user
 ADMIN_EDIT_TREINO_HTML = SHARED_HEAD + """
 <div class="container"><div class="center-card">
   <div class="header">
@@ -371,6 +434,7 @@ ADMIN_EDIT_TREINO_HTML = SHARED_HEAD + """
   <form method="post" action="" style="max-width:640px">
     <div style="margin-bottom:8px"><label>Nome: <input name="nome" value="{{ treino.nome if treino else '' }}" required style="width:100%;padding:8px;border-radius:6px"></label></div>
     <div style="margin-bottom:8px"><label>Aba ID: <input name="aba_id" value="{{ treino.aba_id if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
+    <div style="margin-bottom:8px"><label>URL imagem: <input name="imagem" value="{{ treino.imagem if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
     <div style="margin-bottom:8px"><label>Séries: <input name="series" value="{{ treino.series if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
     <div style="margin-bottom:8px"><label>Repetições: <input name="repeticoes" value="{{ treino.repeticoes if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
     <div style="margin-bottom:8px"><label>Observações:<br><textarea name="observacoes" rows="4" style="width:100%;padding:8px;border-radius:6px">{{ treino.observacoes if treino else '' }}</textarea></label></div>
@@ -380,7 +444,6 @@ ADMIN_EDIT_TREINO_HTML = SHARED_HEAD + """
 </div></div>
 """
 
-# Admin view training template includes export/import/merge controls for that user
 VIEW_TRAINING_HTML = SHARED_HEAD + """
 <div class="container"><div class="center-card">
   <div class="header">
@@ -407,6 +470,9 @@ VIEW_TRAINING_HTML = SHARED_HEAD + """
     {% for t in dados.treinos %}
       <div style="border:1px solid rgba(255,255,255,0.04);padding:10px;border-radius:8px;margin-bottom:8px">
         <strong>{{ t.nome }}</strong> (id: {{ t.id }})<br>
+        {% if t.imagem %}
+          <img src="{{ t.imagem }}" alt="{{ t.nome }}" style="max-height:180px;object-fit:cover;margin-top:8px;border-radius:6px;">
+        {% endif %}
         Séries: {{ t.series }} — Reps: {{ t.repeticoes }}<br>
         Observações: {{ t.observacoes }}<br>
         <a class="ghost small" href="{{ url_for('admin_editar_treino', login=login, treino_id=t.id) }}">Editar</a>
@@ -422,10 +488,10 @@ VIEW_TRAINING_HTML = SHARED_HEAD + """
 </div></div>
 """
 
-# --- Routes: Auth ---
+# ------------- Routes: Authentication -------------
 @app.route("/login", methods=["GET","POST"])
 def login():
-    if request.method=="POST":
+    if request.method == "POST":
         usuario = request.form.get("usuario","").strip()
         senha = request.form.get("senha","")
         users = carregar_usuarios()
@@ -439,14 +505,14 @@ def login():
         session["usuario"] = usuario
         users[usuario]["ultimo_acesso"] = now_iso()
         salvar_usuarios(users)
-        if users[usuario].get("tipo")=="admin":
+        if users[usuario].get("tipo") == "admin":
             return redirect(url_for("admin_dashboard"))
         return redirect(url_for("index"))
     return render_template_string(LOGIN_HTML)
 
 @app.route("/registrar", methods=["GET","POST"])
 def registrar():
-    if request.method=="POST":
+    if request.method == "POST":
         nome = request.form.get("nome","").strip()
         sobrenome = request.form.get("sobrenome","").strip()
         senha = request.form.get("senha","")
@@ -470,7 +536,7 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
-# --- Main user routes ---
+# ------------- Main user routes -------------
 @app.route("/")
 def index():
     if "usuario" not in session:
@@ -478,12 +544,12 @@ def index():
     usuario = session["usuario"]
     dados = carregar_dados_usuario(usuario)
     aba_id = request.args.get("aba")
-    treinos = dados.get("treinos",[])
+    treinos = dados.get("treinos", [])
     if aba_id:
-        treinos = [t for t in treinos if str(t.get("aba_id"))==str(aba_id)]
+        treinos = [t for t in treinos if str(t.get("aba_id")) == str(aba_id)]
     users = carregar_usuarios()
-    is_admin = users.get(usuario,{}).get("tipo")=="admin"
-    return render_template_string(MAIN_HTML, abas=dados.get("abas",[]), treinos=treinos, mensagem=request.args.get("mensagem"), usuario=usuario, is_admin=is_admin)
+    is_admin = users.get(usuario, {}).get("tipo") == "admin"
+    return render_template_string(MAIN_HTML, abas=dados.get("abas", []), treinos=treinos, mensagem=request.args.get("mensagem"), usuario=usuario, is_admin=is_admin)
 
 @app.route("/exportar", methods=["GET"])
 def exportar():
@@ -535,19 +601,39 @@ def mesclar():
     salvar_dados_usuario(usuario, merged)
     return redirect(url_for("index", mensagem="Dados mesclados com sucesso!"))
 
+# AJAX: create aba quickly
+@app.route("/criar_aba_ajax", methods=["POST"])
+def criar_aba_ajax():
+    if "usuario" not in session:
+        return jsonify({"error": "not authenticated"}), 401
+    payload = {}
+    if request.is_json:
+        payload = request.get_json()
+    else:
+        payload = request.form.to_dict()
+    nome = (payload.get("nome") or "").strip()
+    if not nome:
+        return jsonify({"error": "nome vazio"}), 400
+    dados = carregar_dados_usuario(session["usuario"])
+    existing_ids = [a.get("id",0) for a in dados.get("abas",[])]
+    next_id = max(existing_ids)+1 if existing_ids else 1
+    aba = {"id": next_id, "nome": nome}
+    dados.setdefault("abas", []).append(aba)
+    salvar_dados_usuario(session["usuario"], dados)
+    return jsonify(aba), 200
+
 @app.route("/criar_treino", methods=["GET","POST"])
 def criar_treino():
     if "usuario" not in session:
         return redirect(url_for("login"))
     usuario = session["usuario"]
-    if request.method=="POST":
+    if request.method == "POST":
         nome = request.form.get("nome","").strip()
         if not nome:
             return redirect(url_for("criar_treino"))
         nova_aba = (request.form.get("nova_aba") or "").strip()
         aba_id = request.form.get("aba_id") or ""
         dados = carregar_dados_usuario(usuario)
-        # handle new aba
         if nova_aba:
             existing_ids = [a.get("id",0) for a in dados.get("abas",[])]
             next_id = max(existing_ids)+1 if existing_ids else 1
@@ -555,14 +641,13 @@ def criar_treino():
             uso_aba = next_id
         else:
             uso_aba = int(aba_id) if aba_id else 0
-        # treino id
         treino_ids = [t.get("id",0) for t in dados.get("treinos",[])]
         novo_id = max(treino_ids)+1 if treino_ids else 1
         treino = {
             "id": novo_id,
             "aba_id": int(uso_aba),
             "nome": nome,
-            "imagem": "",
+            "imagem": request.form.get("imagem",""),
             "series": request.form.get("series",""),
             "repeticoes": request.form.get("repeticoes",""),
             "observacoes": request.form.get("observacoes",""),
@@ -571,13 +656,12 @@ def criar_treino():
         dados.setdefault("treinos",[]).append(treino)
         salvar_dados_usuario(usuario, dados)
         return redirect(url_for("index"))
-    # GET
     dados = carregar_dados_usuario(session["usuario"])
     return render_template_string(CREATE_TREINO_HTML, abas=dados.get("abas",[]), usuario=session["usuario"])
 
 @app.route("/adicionar", methods=["POST"])
 def adicionar():
-    # compat (keeps previous endpoint) - same as criar_treino POST
+    # compatibility (old endpoint) redirects to criar_treino POST
     return criar_treino()
 
 @app.route("/registrar/<int:id>", methods=["POST"])
@@ -587,8 +671,12 @@ def registrar_treino(id):
     usuario = session["usuario"]
     dados = carregar_dados_usuario(usuario)
     for t in dados.get("treinos", []):
-        if t.get("id")==id:
-            t.setdefault("historico",[]).append({"data": datetime.now().strftime("%d/%m/%Y %H:%M"), "peso": request.form.get("peso"), "reps": request.form.get("reps")})
+        if t.get("id") == id:
+            t.setdefault("historico", []).append({
+                "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                "peso": request.form.get("peso"),
+                "reps": request.form.get("reps")
+            })
             break
     salvar_dados_usuario(usuario, dados)
     return redirect(url_for("index"))
@@ -599,7 +687,7 @@ def excluir(id):
         return redirect(url_for("login"))
     usuario = session["usuario"]
     dados = carregar_dados_usuario(usuario)
-    dados["treinos"] = [t for t in dados.get("treinos",[]) if t.get("id")!=id]
+    dados["treinos"] = [t for t in dados.get("treinos",[]) if t.get("id") != id]
     salvar_dados_usuario(usuario, dados)
     return redirect(url_for("index"))
 
@@ -609,10 +697,10 @@ def editar(id):
         return redirect(url_for("login"))
     usuario = session["usuario"]
     dados = carregar_dados_usuario(usuario)
-    treino = next((t for t in dados.get("treinos",[]) if t.get("id")==id), None)
+    treino = next((t for t in dados.get("treinos",[]) if t.get("id") == id), None)
     if not treino:
         return "Treino não encontrado", 404
-    if request.method=="POST":
+    if request.method == "POST":
         treino["nome"] = request.form.get("nome", treino.get("nome"))
         treino["imagem"] = request.form.get("imagem", treino.get("imagem"))
         treino["series"] = request.form.get("series", treino.get("series"))
@@ -621,28 +709,28 @@ def editar(id):
         salvar_dados_usuario(usuario, dados)
         return redirect(url_for("index"))
     return f"""
-    <body style="font-family:Arial;padding:20px;">
-      <h1>Editar Exercício</h1>
+    <body style="font-family:Arial;padding:20px;background:var(--bg);color:var(--text);">
+      <h1>✏️ Editar Exercício</h1>
       <form method="post">
-        <input name="nome" value="{treino.get('nome','')}" required><br><br>
-        <input name="imagem" value="{treino.get('imagem','')}"><br><br>
-        <input name="series" value="{treino.get('series','')}"><br><br>
-        <input name="repeticoes" value="{treino.get('repeticoes','')}"><br><br>
-        <textarea name="observacoes">{treino.get('observacoes','')}</textarea><br><br>
-        <button type="submit">Salvar</button>
+        <input name="nome" value="{treino.get('nome','')}" required style="width:100%;padding:12px;margin-top:10px;border-radius:10px;"><br><br>
+        <input name="imagem" value="{treino.get('imagem','')}" placeholder="URL da imagem" style="width:100%;padding:12px;margin-top:10px;border-radius:10px;"><br><br>
+        <input name="series" value="{treino.get('series','')}" style="width:100%;padding:12px;margin-top:10px;border-radius:10px;"><br><br>
+        <input name="repeticoes" value="{treino.get('repeticoes','')}" style="width:100%;padding:12px;margin-top:10px;border-radius:10px;"><br><br>
+        <textarea name="observacoes" style="width:100%;height:140px;padding:12px;margin-top:10px;border-radius:10px;">{treino.get('observacoes','')}</textarea><br><br>
+        <button type="submit" style="width:100%;padding:12px;background:var(--accent);color:white;border:none;border-radius:10px;">Salvar</button>
       </form>
     </body>
     """
 
-# --- Admin routes ---
+# ------------- Admin routes -------------
 @app.route("/admin")
 @admin_required
 def admin_dashboard():
     users = carregar_usuarios()
     total = len(users)
-    ativos = sum(1 for u in users.values() if u.get("ativo",True))
+    ativos = sum(1 for u in users.values() if u.get("ativo", True))
     bloqueados = total - ativos
-    total_treinos = sum(len(carregar_dados_usuario(login).get("treinos",[])) for login in users.keys())
+    total_treinos = sum(len(carregar_dados_usuario(login).get("treinos", [])) for login in users.keys())
     recent_regs = sorted(users.items(), key=lambda kv: kv[1].get("data_cadastro",""), reverse=True)[:5]
     recent_access = sorted(users.items(), key=lambda kv: kv[1].get("ultimo_acesso") or "", reverse=True)[:5]
     return render_template_string(SHARED_HEAD + """
@@ -679,7 +767,7 @@ def admin_editar_usuario(login):
     if login not in users:
         return "Usuário não encontrado", 404
     meta = users[login]
-    if request.method=="POST":
+    if request.method == "POST":
         novo_login = (request.form.get("login") or "").strip()
         nome = (request.form.get("nome") or "").strip()
         sobrenome = (request.form.get("sobrenome") or "").strip()
@@ -688,25 +776,27 @@ def admin_editar_usuario(login):
         nova_senha = request.form.get("nova_senha","").strip()
         if login == ADMIN_LOGIN:
             tipo = "admin"; ativo = True
-        if session.get("usuario")==login and tipo!="admin":
-            tipo="admin"
+        if session.get("usuario") == login and tipo != "admin":
+            tipo = "admin"
         if not novo_login:
             return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta, mensagem="Login inválido")
         if not nome or not sobrenome:
             return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta, mensagem="Nome/sobrenome inválidos")
         users = carregar_usuarios()
         meta = users.pop(login)
-        meta["nome"]=nome; meta["sobrenome"]=sobrenome; meta["tipo"]=tipo; meta["ativo"]=bool(ativo)
-        if nova_senha: meta["senha"]=generate_password_hash(nova_senha)
+        meta["nome"] = nome; meta["sobrenome"] = sobrenome; meta["tipo"] = tipo; meta["ativo"] = bool(ativo)
+        if nova_senha:
+            meta["senha"] = generate_password_hash(nova_senha)
         if novo_login != login:
             if novo_login in users:
-                users[login]=meta; salvar_usuarios(users)
+                users[login] = meta; salvar_usuarios(users)
                 return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta, mensagem="Novo login já existe")
             old_path = user_data_path(login); new_path = user_data_path(novo_login)
-            if os.path.exists(old_path): os.replace(old_path, new_path)
-            users[novo_login]=meta
+            if os.path.exists(old_path):
+                os.replace(old_path, new_path)
+            users[novo_login] = meta
         else:
-            users[login]=meta
+            users[login] = meta
         salvar_usuarios(users)
         return redirect(url_for("admin_usuarios"))
     return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta)
@@ -714,13 +804,14 @@ def admin_editar_usuario(login):
 @app.route("/admin/usuario/reset_senha/<login>", methods=["POST"])
 @admin_required
 def admin_reset_senha(login):
-    if login==ADMIN_LOGIN:
+    if login == ADMIN_LOGIN:
         return "Não é permitido alterar a senha do admin por aqui.", 403
     nova = (request.form.get("nova_senha") or "").strip()
     if not nova:
         return redirect(url_for("admin_usuarios"))
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
+    if login not in users:
+        return "Usuário não encontrado", 404
     users[login]["senha"] = generate_password_hash(nova)
     salvar_usuarios(users)
     return redirect(url_for("admin_usuarios"))
@@ -728,45 +819,55 @@ def admin_reset_senha(login):
 @app.route("/admin/usuario/bloquear/<login>", methods=["POST"])
 @admin_required
 def admin_bloquear(login):
-    if login==ADMIN_LOGIN: return "Não é permitido bloquear o admin.", 403
+    if login == ADMIN_LOGIN:
+        return "Não é permitido bloquear o admin.", 403
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    users[login]["ativo"]=False; salvar_usuarios(users)
+    if login not in users:
+        return "Usuário não encontrado", 404
+    users[login]["ativo"] = False
+    salvar_usuarios(users)
     return redirect(url_for("admin_usuarios"))
 
 @app.route("/admin/usuario/desbloquear/<login>", methods=["POST"])
 @admin_required
 def admin_desbloquear(login):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    users[login]["ativo"]=True; salvar_usuarios(users)
+    if login not in users:
+        return "Usuário não encontrado", 404
+    users[login]["ativo"] = True
+    salvar_usuarios(users)
     return redirect(url_for("admin_usuarios"))
 
 @app.route("/admin/usuario/excluir/<login>", methods=["POST"])
 @admin_required
 def admin_excluir(login):
-    if login==ADMIN_LOGIN: return "Não é permitido excluir o admin.", 403
+    if login == ADMIN_LOGIN:
+        return "Não é permitido excluir o admin.", 403
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    users.pop(login); salvar_usuarios(users)
+    if login not in users:
+        return "Usuário não encontrado", 404
+    users.pop(login)
+    salvar_usuarios(users)
     p = user_data_path(login)
-    if os.path.exists(p): os.remove(p)
+    if os.path.exists(p):
+        os.remove(p)
     return redirect(url_for("admin_usuarios"))
 
 @app.route("/admin/usuario/treinos/<login>")
 @admin_required
 def admin_ver_treinos(login):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
+    if login not in users:
+        return "Usuário não encontrado", 404
     dados = carregar_dados_usuario(login)
     return render_template_string(VIEW_TRAINING_HTML, login=login, dados=dados)
 
-# Admin export/import/merge for a specific user
 @app.route("/admin/usuario/<login>/exportar")
 @admin_required
 def admin_exportar_usuario(login):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
+    if login not in users:
+        return "Usuário não encontrado", 404
     dados = carregar_dados_usuario(login)
     json_str = json.dumps(dados, ensure_ascii=False, indent=4)
     buffer = BytesIO(json_str.encode("utf-8"))
@@ -776,10 +877,13 @@ def admin_exportar_usuario(login):
 @admin_required
 def admin_importar_usuario(login):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    if "arquivo" not in request.files: return redirect(url_for("admin_ver_treinos", login=login))
+    if login not in users:
+        return "Usuário não encontrado", 404
+    if "arquivo" not in request.files:
+        return redirect(url_for("admin_ver_treinos", login=login))
     arquivo = request.files["arquivo"]
-    if arquivo.filename == "": return redirect(url_for("admin_ver_treinos", login=login))
+    if arquivo.filename == "":
+        return redirect(url_for("admin_ver_treinos", login=login))
     try:
         conteudo = json.loads(arquivo.read().decode("utf-8"))
     except Exception:
@@ -793,10 +897,13 @@ def admin_importar_usuario(login):
 @admin_required
 def admin_mesclar_usuario(login):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    if "arquivo" not in request.files: return redirect(url_for("admin_ver_treinos", login=login))
+    if login not in users:
+        return "Usuário não encontrado", 404
+    if "arquivo" not in request.files:
+        return redirect(url_for("admin_ver_treinos", login=login))
     arquivo = request.files["arquivo"]
-    if arquivo.filename == "": return redirect(url_for("admin_ver_treinos", login=login))
+    if arquivo.filename == "":
+        return redirect(url_for("admin_ver_treinos", login=login))
     try:
         conteudo = json.loads(arquivo.read().decode("utf-8"))
     except Exception:
@@ -808,20 +915,20 @@ def admin_mesclar_usuario(login):
     salvar_dados_usuario(login, merged)
     return redirect(url_for("admin_ver_treinos", login=login))
 
-# Admin create/edit treino for user (reuse admin edit template)
 @app.route("/admin/usuario/<login>/treino/criar", methods=["GET","POST"])
 @admin_required
 def admin_criar_treino(login):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    if request.method=="POST":
+    if login not in users:
+        return "Usuário não encontrado", 404
+    if request.method == "POST":
         dados = carregar_dados_usuario(login)
         novo_id = max((t.get("id",0) for t in dados.get("treinos",[])), default=0) + 1
         treino = {
             "id": novo_id,
             "aba_id": int(request.form.get("aba_id") or 0),
             "nome": request.form.get("nome",""),
-            "imagem": "",
+            "imagem": request.form.get("imagem",""),
             "series": request.form.get("series",""),
             "repeticoes": request.form.get("repeticoes",""),
             "observacoes": request.form.get("observacoes",""),
@@ -836,13 +943,16 @@ def admin_criar_treino(login):
 @admin_required
 def admin_editar_treino(login, treino_id):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
+    if login not in users:
+        return "Usuário não encontrado", 404
     dados = carregar_dados_usuario(login)
     treino = next((t for t in dados.get("treinos",[]) if t.get("id")==treino_id), None)
-    if not treino: return "Treino não encontrado", 404
-    if request.method=="POST":
+    if not treino:
+        return "Treino não encontrado", 404
+    if request.method == "POST":
         treino["nome"] = request.form.get("nome", treino.get("nome"))
         treino["aba_id"] = int(request.form.get("aba_id") or treino.get("aba_id",0))
+        treino["imagem"] = request.form.get("imagem", treino.get("imagem"))
         treino["series"] = request.form.get("series", treino.get("series"))
         treino["repeticoes"] = request.form.get("repeticoes", treino.get("repeticoes"))
         treino["observacoes"] = request.form.get("observacoes", treino.get("observacoes"))
@@ -854,7 +964,8 @@ def admin_editar_treino(login, treino_id):
 @admin_required
 def admin_excluir_treino(login, treino_id):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
+    if login not in users:
+        return "Usuário não encontrado", 404
     dados = carregar_dados_usuario(login)
     dados["treinos"] = [t for t in dados.get("treinos",[]) if t.get("id")!=treino_id]
     salvar_dados_usuario(login, dados)
@@ -864,10 +975,12 @@ def admin_excluir_treino(login, treino_id):
 @admin_required
 def admin_duplicar_treino(login, treino_id):
     users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
+    if login not in users:
+        return "Usuário não encontrado", 404
     dados = carregar_dados_usuario(login)
     treino = next((t for t in dados.get("treinos",[]) if t.get("id")==treino_id), None)
-    if not treino: return "Treino não encontrado", 404
+    if not treino:
+        return "Treino não encontrado", 404
     novo_id = max((t.get("id",0) for t in dados.get("treinos",[])), default=0) + 1
     novo = copy.deepcopy(treino)
     novo["id"] = novo_id
@@ -876,7 +989,7 @@ def admin_duplicar_treino(login, treino_id):
     salvar_dados_usuario(login, dados)
     return redirect(url_for("admin_ver_treinos", login=login))
 
-# Run
+# ------------- Run -------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
