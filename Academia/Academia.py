@@ -9,17 +9,16 @@ Aplicação Flask completa (arquivo único) com:
 - Painel administrativo: listar, pesquisar, editar, bloquear/desbloquear, excluir usuários,
   resetar senha, visualizar/editar treinos (CRUD).
 - Regras de segurança: admin protegido de exclusão/bloqueio/perda de permissão.
-- Interfaces simples via templates inline (render_template_string) para uso imediato.
+- Layout atualizado: centralizado, responsivo, emoji de academia e botão tema claro/escuro.
 """
 
-from flask import Flask, request, redirect, session, send_file, render_template_string, url_for, abort
+from flask import Flask, request, redirect, session, send_file, render_template_string, url_for
 import os
 import json
 from datetime import datetime
 from io import BytesIO
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
-import shutil
 
 # ----------------------------
 # Configurações
@@ -138,295 +137,496 @@ def admin_required(f):
     return wrapped
 
 # ----------------------------
-# Templates (inline para arquivo único)
+# Templates atualizados (com CSS/JS para tema e responsividade)
 # ----------------------------
-LOGIN_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Login</title></head>
-<body style="font-family:Arial;padding:20px;">
-  <h1>Login</h1>
-  {% if mensagem %}
-    <div style="padding:10px;background:#fdd;border:1px solid #f99;margin-bottom:10px;">{{ mensagem }}</div>
-  {% endif %}
-  <form method="post" action="{{ url_for('login') }}">
-    <label>Usuário: <input type="text" name="usuario" required></label><br><br>
-    <label>Senha: <input type="password" name="senha" required></label><br><br>
-    <button type="submit">Entrar</button>
-  </form>
-  <p><a href="{{ url_for('registrar') }}">Criar conta</a></p>
-</body>
-</html>
+# Shared header/footer snippets to reuse theme toggle and header
+SHARED_HEAD = """
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --bg: #121212;
+  --card: #1e1e1e;
+  --text: #ffffff;
+  --accent: #667eea;
+  --danger: #e74c3c;
+  --muted: #999999;
+}
+:root.light{
+  --bg: #f5f6fb;
+  --card: #ffffff;
+  --text: #111827;
+  --accent: #4f46e5;
+  --danger: #c0392b;
+  --muted: #666666;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Helvetica Neue", Arial;}
+body{background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;padding:20px;}
+.container{width:100%;max-width:980px;margin:0 auto;}
+.center-card{background:var(--card);padding:24px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,0.25);}
+/* header */
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{font-size:28px;line-height:1;display:flex;align-items:center}
+.title{font-weight:800;font-size:20px}
+.actions{display:flex;align-items:center;gap:8px}
+/* form */
+.form{max-width:480px;margin:0 auto}
+.form .field{margin-bottom:12px}
+label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
+input[type="text"], input[type="password"], input[type="number"], textarea, select{
+  width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)
+}
+button.btn{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600}
+button.ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;cursor:pointer}
+.small{padding:6px 10px;font-size:14px}
+.footer-note{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
+
+/* responsive */
+@media (max-width:600px){
+  .header{flex-direction:column;align-items:flex-start}
+  .title{font-size:18px}
+  .logo{font-size:24px}
+  .form{padding:0 10px}
+}
+</style>
+
+<script>
+/* Theme toggle: uses localStorage and toggles class on :root */
+function initThemeToggle(){
+  const root = document.documentElement;
+  const stored = localStorage.getItem('theme');
+  if(stored === 'light') root.classList.add('light');
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.matches('[data-toggle-theme]')){
+      root.classList.toggle('light');
+      const isLight = root.classList.contains('light');
+      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+    }
+  });
+}
+document.addEventListener('DOMContentLoaded', initThemeToggle);
+</script>
 """
 
-REGISTRO_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Registrar</title></head>
-<body style="font-family:Arial;padding:20px;">
-  <h1>Criar Conta</h1>
-  {% if mensagem %}
-    <div style="padding:10px;background:#fdd;border:1px solid #f99;margin-bottom:10px;">{{ mensagem }}</div>
-  {% endif %}
-  <form method="post" action="{{ url_for('registrar') }}">
-    <label>Nome: <input name="nome" required></label><br><br>
-    <label>Sobrenome: <input name="sobrenome" required></label><br><br>
-    <label>Senha: <input type="password" name="senha" required></label><br><br>
-    <label>Confirmar Senha: <input type="password" name="confirmar_senha" required></label><br><br>
-    <button type="submit">Criar</button>
-  </form>
-  <p><a href="{{ url_for('login') }}">Voltar ao login</a></p>
-</body>
-</html>
-"""
+LOGIN_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Meu Treino</div>
+          <div style="font-size:13px;color:var(--muted)">Acesse sua rotina</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
+    </div>
 
-MAIN_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Meu Treino</title></head>
-<body style="font-family:Arial;padding:20px;background:#121212;color:#fff;">
-  <div style="display:flex;justify-content:space-between;align-items:center;">
-    <h1>🏋️ Meu Treino</h1>
-    <div>
-      <span>👤 {{ usuario }}</span>
-      <a href="{{ url_for('logout') }}" style="color:#fff;margin-left:10px;">Sair</a>
-      {% if is_admin %}
-        <a href="{{ url_for('admin_dashboard') }}" style="color:#fff;margin-left:10px;">Painel Admin</a>
+    <div class="form">
+      <h2 style="margin-top:0;margin-bottom:6px">Entrar</h2>
+      <p style="color:var(--muted);margin-top:0;margin-bottom:12px">Acesse sua conta</p>
+
+      {% if mensagem %}
+        <div style="background:rgba(255,0,0,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>
       {% endif %}
+
+      <form method="post" action="{{ url_for('login') }}">
+        <div class="field">
+          <label for="usuario">Usuário:</label>
+          <input id="usuario" type="text" name="usuario" required placeholder="ex: joao.silva">
+        </div>
+        <div class="field">
+          <label for="senha">Senha:</label>
+          <input id="senha" type="password" name="senha" required placeholder="Sua senha">
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn" type="submit">Entrar</button>
+          <a href="{{ url_for('registrar') }}" class="ghost small" style="text-decoration:none">Criar conta</a>
+        </div>
+      </form>
+
+      <div class="footer-note">Protegido — senhas armazenadas em hash seguro</div>
     </div>
   </div>
+</div>
+"""
 
-  {% if mensagem %}
-    <div style="padding:10px;background:#0a0;margin:10px 0;color:#000;">{{ mensagem }}</div>
-  {% endif %}
+REGISTRO_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Meu Treino</div>
+          <div style="font-size:13px;color:var(--muted)">Crie sua conta</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
+    </div>
 
-  <section style="margin-top:20px;">
-    <h2>Abas</h2>
-    {% if abas %}
-      <ul>
-        {% for aba in abas %}
-          <li>{{ aba.nome }}</li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p>Nenhuma aba criada.</p>
+    <div class="form">
+      <h2 style="margin-top:0;margin-bottom:6px">Registrar</h2>
+      <p style="color:var(--muted);margin-top:0;margin-bottom:12px">Preencha os dados</p>
+
+      {% if mensagem %}
+        <div style="background:rgba(255,0,0,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('registrar') }}">
+        <div class="field">
+          <label for="nome">Nome:</label>
+          <input id="nome" type="text" name="nome" required placeholder="Diego">
+        </div>
+        <div class="field">
+          <label for="sobrenome">Sobrenome:</label>
+          <input id="sobrenome" type="text" name="sobrenome" required placeholder="Mota">
+        </div>
+        <div class="field">
+          <label for="senha">Senha:</label>
+          <input id="senha" type="password" name="senha" required placeholder="Crie uma senha segura">
+        </div>
+        <div class="field">
+          <label for="confirmar_senha">Confirmar senha:</label>
+          <input id="confirmar_senha" type="password" name="confirmar_senha" required placeholder="Repita a senha">
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn" type="submit">Criar Conta</button>
+          <a href="{{ url_for('login') }}" class="ghost small" style="text-decoration:none">Voltar ao Login</a>
+        </div>
+      </form>
+
+      <div class="footer-note">Seu perfil será criado com login no formato nome.sobrenome</div>
+    </div>
+  </div>
+</div>
+"""
+
+MAIN_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Meu Treino</div>
+          <div style="font-size:13px;color:var(--muted)">Bem-vindo(a)</div>
+        </div>
+      </div>
+      <div class="actions">
+        <div style="font-size:14px;color:var(--muted);margin-right:8px">👤 {{ usuario }}</div>
+        <a class="ghost small" href="{{ url_for('logout') }}">Sair</a>
+        {% if is_admin %}
+          <a class="btn small" href="{{ url_for('admin_dashboard') }}" style="margin-left:8px">Admin</a>
+        {% endif %}
+        <button class="ghost small" data-toggle-theme style="margin-left:8px">Alternar Tema</button>
+      </div>
+    </div>
+
+    {% if mensagem %}
+      <div style="background:rgba(0,255,0,0.08);padding:10px;border-radius:8px;color:var(--accent);margin-bottom:12px">{{ mensagem }}</div>
     {% endif %}
-  </section>
 
-  <section style="margin-top:20px;">
-    <h2>Treinos</h2>
-    {% if treinos %}
-      {% for t in treinos %}
-        <div style="background:#1e1e1e;padding:12px;border-radius:8px;margin-bottom:10px;">
-          <h3>{{ t.nome }}</h3>
-          <p>Séries: {{ t.series }} — Repetições: {{ t.repeticoes }}</p>
-          <p>{{ t.observacoes }}</p>
-          <p><a href="{{ url_for('editar', id=t.id) }}">Editar</a> |
-             <a href="{{ url_for('excluir', id=t.id) }}" onclick="return confirm('Excluir exercício?')">Excluir</a></p>
+    <section style="display:flex;gap:20px;flex-wrap:wrap">
+      <div style="flex:1;min-width:260px">
+        <h3 style="margin-bottom:8px">Abas</h3>
+        {% if abas %}
+          <ul style="color:var(--muted)">
+            {% for aba in abas %}
+              <li>{{ aba.nome }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p style="color:var(--muted)">Nenhuma aba criada.</p>
+        {% endif %}
+      </div>
+
+      <div style="flex:2;min-width:300px">
+        <h3 style="margin-bottom:8px">Treinos</h3>
+        {% if treinos %}
+          {% for t in treinos %}
+            <div style="background:var(--bg);border:1px solid rgba(255,255,255,0.04);padding:12px;border-radius:10px;margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <strong style="font-size:16px">{{ t.nome }}</strong>
+                <div>
+                  <a class="ghost small" href="{{ url_for('editar', id=t.id) }}">Editar</a>
+                  <a class="ghost small" href="{{ url_for('excluir', id=t.id) }}" onclick="return confirm('Excluir exercício?')">Excluir</a>
+                </div>
+              </div>
+              <p style="margin:6px 0;color:var(--muted)">Séries: {{ t.series }} — Repetições: {{ t.repeticoes }}</p>
+              <p style="margin:6px 0;color:var(--muted)">{{ t.observacoes }}</p>
+              <div>
+                <h4 style="margin:6px 0">Histórico</h4>
+                {% if t.historico %}
+                  <ul style="color:var(--muted)">
+                    {% for h in t.historico|reverse %}
+                      <li>{{ h.data }} — Peso: {{ h.peso }} — Reps: {{ h.reps }}</li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p style="color:var(--muted)">Nenhum histórico.</p>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="color:var(--muted)">Nenhum treino cadastrado.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+"""
+
+# Admin templates (reuse SHARED_HEAD)
+ADMIN_DASH_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Meu Treino — Admin</div>
+          <div style="font-size:13px;color:var(--muted)">Painel administrativo</div>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="ghost small" href="{{ url_for('admin_usuarios') }}">Gerenciar Usuários</a>
+        <a class="ghost small" href="{{ url_for('index') }}">Voltar</a>
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:18px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <h3>Resumo</h3>
+        <ul style="color:var(--muted)">
+          <li>Total de usuários: {{ total }}</li>
+          <li>Usuários ativos: {{ ativos }}</li>
+          <li>Usuários bloqueados: {{ bloqueados }}</li>
+          <li>Total de treinos: {{ total_treinos }}</li>
+        </ul>
+      </div>
+
+      <div style="flex:2;min-width:300px">
+        <h3>Últimos registros</h3>
+        <ul style="color:var(--muted)">
+          {% for login, meta in recent_regs %}
+            <li>{{ login }} — {{ meta.data_cadastro }}</li>
+          {% endfor %}
+        </ul>
+
+        <h3>Últimos acessos</h3>
+        <ul style="color:var(--muted)">
+          {% for login, meta in recent_access %}
+            <li>{{ login }} — {{ meta.ultimo_acesso or "-" }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+
+ADMIN_USERS_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Usuários</div>
+          <div style="font-size:13px;color:var(--muted)">Gerenciar contas</div>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="ghost small" href="{{ url_for('admin_dashboard') }}">Dashboard</a>
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
+    </div>
+
+    <form method="get" action="{{ url_for('admin_usuarios') }}" style="margin-bottom:12px">
+      <input name="q" placeholder="Pesquisar por login, nome ou sobrenome" value="{{ query }}" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);width:60%;max-width:360px">
+      <button class="btn small" type="submit">Pesquisar</button>
+      <a href="{{ url_for('admin_usuarios') }}" class="ghost small" style="margin-left:8px">Limpar</a>
+    </form>
+
+    <div style="overflow:auto">
+      <table border="0" cellpadding="8" style="width:100%;border-collapse:collapse;color:var(--text)">
+        <thead style="text-align:left;color:var(--muted)">
+          <tr>
+            <th>Usuário</th><th>Nome</th><th>Tipo</th><th>Status</th><th>Cadastro</th><th>Último acesso</th><th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for login, meta in users %}
+          <tr style="border-top:1px solid rgba(255,255,255,0.03)">
+            <td>{{ login }}</td>
+            <td>{{ meta.nome }} {{ meta.sobrenome }}</td>
+            <td>{{ meta.tipo }}</td>
+            <td>{{ 'Ativo' if meta.ativo else 'Bloqueado' }}</td>
+            <td>{{ meta.data_cadastro }}</td>
+            <td>{{ meta.ultimo_acesso or '-' }}</td>
+            <td>
+              <a class="ghost small" href="{{ url_for('admin_ver_treinos', login=login) }}">Ver</a>
+              <a class="ghost small" href="{{ url_for('admin_editar_usuario', login=login) }}">Editar</a>
+              {% if meta.ativo %}
+                <form style="display:inline" method="post" action="{{ url_for('admin_bloquear', login=login) }}"><button class="ghost small" type="submit">Bloquear</button></form>
+              {% else %}
+                <form style="display:inline" method="post" action="{{ url_for('admin_desbloquear', login=login) }}"><button class="ghost small" type="submit">Desbloquear</button></form>
+              {% endif %}
+              {% if login != ADMIN_LOGIN %}
+                <form style="display:inline" method="post" action="{{ url_for('admin_excluir', login=login) }}" onsubmit="return confirm('Confirma exclusão de ' + '{{login}}' + ' ?');">
+                  <button class="ghost small" type="submit">Excluir</button>
+                </form>
+              {% endif %}
+              <form style="display:inline" method="post" action="{{ url_for('admin_reset_senha', login=login) }}">
+                <input type="password" name="nova_senha" placeholder="Nova senha" style="padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);">
+                <button class="ghost small" type="submit">Resetar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:12px"><a href="{{ url_for('admin_dashboard') }}">Voltar</a></p>
+  </div>
+</div>
+"""
+
+ADMIN_EDIT_USER_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Editar Usuário</div>
+          <div style="font-size:13px;color:var(--muted)">{{ login }}</div>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="ghost small" href="{{ url_for('admin_usuarios') }}">Voltar</a>
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
+    </div>
+
+    {% if mensagem %}
+      <div style="background:rgba(255,0,0,0.06);padding:10px;border-radius:8px;color:var(--danger)">{{ mensagem }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('admin_editar_usuario', login=login) }}" style="max-width:520px">
+      <div style="margin-bottom:8px"><label>Login: <input name="login" value="{{ login }}" required style="padding:8px;border-radius:6px;width:100%"></label></div>
+      <div style="margin-bottom:8px"><label>Nome: <input name="nome" value="{{ meta.nome }}" required style="padding:8px;border-radius:6px;width:100%"></label></div>
+      <div style="margin-bottom:8px"><label>Sobrenome: <input name="sobrenome" value="{{ meta.sobrenome }}" required style="padding:8px;border-radius:6px;width:100%"></label></div>
+      <div style="margin-bottom:8px"><label>Tipo:
+        <select name="tipo" style="padding:8px;border-radius:6px;width:100%">
+          <option value="usuario" {% if meta.tipo=='usuario' %}selected{% endif %}>Usuário</option>
+          <option value="admin" {% if meta.tipo=='admin' %}selected{% endif %}>Administrador</option>
+        </select>
+      </label></div>
+      <div style="margin-bottom:8px"><label>Ativo: <input type="checkbox" name="ativo" {% if meta.ativo %}checked{% endif %}></label></div>
+      <div style="margin-bottom:8px"><label>Nova senha (opcional): <input type="password" name="nova_senha" style="padding:8px;border-radius:6px;width:100%"></label></div>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn" type="submit">Salvar</button>
+        <a class="ghost small" href="{{ url_for('admin_usuarios') }}">Cancelar</a>
+      </div>
+    </form>
+
+  </div>
+</div>
+"""
+
+VIEW_TRAINING_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Treinos de {{ login }}</div>
+          <div style="font-size:13px;color:var(--muted)">Visualização administrativa</div>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="ghost small" href="{{ url_for('admin_usuarios') }}">Voltar</a>
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
+    </div>
+
+    <h3>Abas</h3>
+    {% if dados.abas %}
+      <ul style="color:var(--muted)">{% for aba in dados.abas %}<li>{{ aba.id }} — {{ aba.nome }}</li>{% endfor %}</ul>
+    {% else %}
+      <p style="color:var(--muted)">Nenhuma aba.</p>
+    {% endif %}
+
+    <h3>Treinos</h3>
+    <p><a class="btn small" href="{{ url_for('admin_criar_treino', login=login) }}">Criar novo treino</a></p>
+    {% if dados.treinos %}
+      {% for t in dados.treinos %}
+        <div style="border:1px solid rgba(255,255,255,0.04);padding:10px;border-radius:8px;margin-bottom:8px">
+          <strong>{{ t.nome }}</strong> (id: {{ t.id }})<br>
+          Séries: {{ t.series }} — Reps: {{ t.repeticoes }}<br>
+          Observações: {{ t.observacoes }}<br>
+          <a class="ghost small" href="{{ url_for('admin_editar_treino', login=login, treino_id=t.id) }}">Editar</a>
+          <a class="ghost small" href="{{ url_for('admin_excluir_treino', login=login, treino_id=t.id) }}" onclick="return confirm('Excluir treino?')">Excluir</a>
+          <a class="ghost small" href="{{ url_for('admin_duplicar_treino', login=login, treino_id=t.id) }}">Duplicar</a>
           <h4>Histórico</h4>
           {% if t.historico %}
-            <ul>
-              {% for h in t.historico|reverse %}
-                <li>{{ h.data }} — Peso: {{ h.peso }} — Reps: {{ h.reps }}</li>
-              {% endfor %}
-            </ul>
+            <ul style="color:var(--muted)">{% for h in t.historico %}<li>{{ h.data }} — peso {{ h.peso }} — reps {{ h.reps }}</li>{% endfor %}</ul>
           {% else %}
-            <p>Nenhum histórico.</p>
+            <p style="color:var(--muted)">Sem histórico</p>
           {% endif %}
         </div>
       {% endfor %}
     {% else %}
-      <p>Nenhum treino cadastrado.</p>
+      <p style="color:var(--muted)">Nenhum treino.</p>
     {% endif %}
-  </section>
-</body>
-</html>
+  </div>
+</div>
 """
 
-ADMIN_DASH_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Admin - Dashboard</title></head>
-<body style="font-family:Arial;padding:20px;">
-  <h1>Dashboard Administrativo</h1>
-  <ul>
-    <li>Total de usuários: {{ total }}</li>
-    <li>Usuários ativos: {{ ativos }}</li>
-    <li>Usuários bloqueados: {{ bloqueados }}</li>
-    <li>Total de treinos: {{ total_treinos }}</li>
-  </ul>
-
-  <h2>Últimos registros</h2>
-  <ul>
-    {% for login, meta in recent_regs %}
-      <li>{{ login }} — {{ meta.data_cadastro }}</li>
-    {% endfor %}
-  </ul>
-
-  <h2>Últimos acessos</h2>
-  <ul>
-    {% for login, meta in recent_access %}
-      <li>{{ login }} — {{ meta.ultimo_acesso or "-" }}</li>
-    {% endfor %}
-  </ul>
-
-  <p><a href="{{ url_for('admin_usuarios') }}">Gerenciar Usuários</a></p>
-  <p><a href="{{ url_for('index') }}">Voltar ao app</a></p>
-</body>
-</html>
-"""
-
-ADMIN_USERS_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Admin - Usuários</title></head>
-<body style="font-family:Arial;padding:20px;">
-  <h1>Gerenciar Usuários</h1>
-
-  <form method="get" action="{{ url_for('admin_usuarios') }}">
-    <input name="q" placeholder="Pesquisar por login, nome ou sobrenome" value="{{ query }}" style="width:300px;">
-    <button type="submit">Pesquisar</button>
-    <a href="{{ url_for('admin_usuarios') }}" style="margin-left:10px;">Limpar</a>
-  </form>
-
-  <table border="1" cellpadding="6" style="border-collapse:collapse;margin-top:10px;">
-    <thead>
-      <tr>
-        <th>Usuário</th><th>Nome</th><th>Sobrenome</th><th>Tipo</th><th>Status</th><th>Cadastro</th><th>Último acesso</th><th>Ações</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for login, meta in users %}
-      <tr>
-        <td>{{ login }}</td>
-        <td>{{ meta.nome }}</td>
-        <td>{{ meta.sobrenome }}</td>
-        <td>{{ meta.tipo }}</td>
-        <td>{{ 'Ativo' if meta.ativo else 'Bloqueado' }}</td>
-        <td>{{ meta.data_cadastro }}</td>
-        <td>{{ meta.ultimo_acesso or '-' }}</td>
-        <td>
-          <a href="{{ url_for('admin_ver_treinos', login=login) }}">Ver treinos</a> |
-          <a href="{{ url_for('admin_editar_usuario', login=login) }}">Editar</a> |
-          {% if meta.ativo %}
-            <form style="display:inline" method="post" action="{{ url_for('admin_bloquear', login=login) }}"><button type="submit">Bloquear</button></form>
-          {% else %}
-            <form style="display:inline" method="post" action="{{ url_for('admin_desbloquear', login=login) }}"><button type="submit">Desbloquear</button></form>
-          {% endif %}
-          {% if login != ADMIN_LOGIN %}
-            <form style="display:inline" method="post" action="{{ url_for('admin_excluir', login=login) }}" onsubmit="return confirm('Confirma exclusão de ' + '{{login}}' + ' ?');">
-              <button type="submit">Excluir</button>
-            </form>
-          {% endif %}
-          <form style="display:inline" method="post" action="{{ url_for('admin_reset_senha', login=login) }}">
-            <input type="password" name="nova_senha" placeholder="Nova senha">
-            <button type="submit">Resetar</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <p><a href="{{ url_for('admin_dashboard') }}">Voltar ao Dashboard</a></p>
-</body>
-</html>
-"""
-
-ADMIN_EDIT_USER_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Editar Usuário</title></head>
-<body style="font-family:Arial;padding:20px;">
-  <h1>Editar Usuário: {{ login }}</h1>
-  {% if mensagem %}
-    <div style="background:#fdd;padding:8px;margin-bottom:10px;">{{ mensagem }}</div>
-  {% endif %}
-  <form method="post" action="{{ url_for('admin_editar_usuario', login=login) }}">
-    <label>Login: <input name="login" value="{{ login }}" required></label><br><br>
-    <label>Nome: <input name="nome" value="{{ meta.nome }}" required></label><br><br>
-    <label>Sobrenome: <input name="sobrenome" value="{{ meta.sobrenome }}" required></label><br><br>
-    <label>Tipo:
-      <select name="tipo">
-        <option value="usuario" {% if meta.tipo=='usuario' %}selected{% endif %}>Usuário</option>
-        <option value="admin" {% if meta.tipo=='admin' %}selected{% endif %}>Administrador</option>
-      </select>
-    </label><br><br>
-    <label>Ativo: <input type="checkbox" name="ativo" {% if meta.ativo %}checked{% endif %}></label><br><br>
-    <label>Nova senha (opcional): <input type="password" name="nova_senha"></label><br><br>
-    <button type="submit">Salvar</button>
-  </form>
-  <p><a href="{{ url_for('admin_usuarios') }}">Voltar</a></p>
-</body>
-</html>
-"""
-
-VIEW_TRAINING_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Treinos de {{ login }}</title></head>
-<body style="font-family:Arial;padding:20px;">
-  <h1>Treinos de {{ login }}</h1>
-  <p><a href="{{ url_for('admin_usuarios') }}">Voltar</a></p>
-
-  <h2>Abas</h2>
-  {% if dados.abas %}
-    <ul>
-      {% for aba in dados.abas %}
-        <li>{{ aba.id }} — {{ aba.nome }}</li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <p>Nenhuma aba.</p>
-  {% endif %}
-
-  <h2>Treinos</h2>
-  <p><a href="{{ url_for('admin_criar_treino', login=login) }}">Criar novo treino</a></p>
-  {% if dados.treinos %}
-    {% for t in dados.treinos %}
-      <div style="border:1px solid #ccc;padding:8px;margin:8px 0;">
-        <strong>{{ t.nome }}</strong> (id: {{ t.id }})<br>
-        Séries: {{ t.series }} — Reps: {{ t.repeticoes }}<br>
-        Observações: {{ t.observacoes }}<br>
-        <a href="{{ url_for('admin_editar_treino', login=login, treino_id=t.id) }}">Editar</a> |
-        <a href="{{ url_for('admin_excluir_treino', login=login, treino_id=t.id) }}" onclick="return confirm('Excluir treino?')">Excluir</a> |
-        <a href="{{ url_for('admin_duplicar_treino', login=login, treino_id=t.id) }}">Duplicar</a>
-        <h4>Histórico</h4>
-        {% if t.historico %}
-          <ul>
-            {% for h in t.historico %}
-              <li>{{ h.data }} — peso {{ h.peso }} — reps {{ h.reps }}</li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p>Sem histórico</p>
-        {% endif %}
+ADMIN_EDIT_TREINO_HTML = SHARED_HEAD + """
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">{{ 'Editar' if treino else 'Criar' }} Treino</div>
+          <div style="font-size:13px;color:var(--muted)">{{ login }}</div>
+        </div>
       </div>
-    {% endfor %}
-  {% else %}
-    <p>Nenhum treino.</p>
-  {% endif %}
-</body>
-</html>
-"""
+      <div class="actions">
+        <a class="ghost small" href="{{ url_for('admin_ver_treinos', login=login) }}">Voltar</a>
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
+    </div>
 
-ADMIN_EDIT_TREINO_HTML = """
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Editar Treino</title></head>
-<body style="font-family:Arial;padding:20px;">
-  <h1>{{ 'Editar' if treino else 'Criar' }} Treino para {{ login }}</h1>
-  <form method="post" action="">
-    <label>Nome: <input name="nome" value="{{ treino.nome if treino else '' }}" required></label><br><br>
-    <label>Aba ID: <input name="aba_id" value="{{ treino.aba_id if treino else '' }}"></label><br><br>
-    <label>Séries: <input name="series" value="{{ treino.series if treino else '' }}"></label><br><br>
-    <label>Repetições: <input name="repeticoes" value="{{ treino.repeticoes if treino else '' }}"></label><br><br>
-    <label>Observações:<br><textarea name="observacoes" rows="4" cols="60">{{ treino.observacoes if treino else '' }}</textarea></label><br><br>
-    <button type="submit">Salvar</button>
-  </form>
-  <p><a href="{{ url_for('admin_ver_treinos', login=login) }}">Voltar</a></p>
-</body>
-</html>
+    <form method="post" action="" style="max-width:640px">
+      <div style="margin-bottom:8px"><label>Nome: <input name="nome" value="{{ treino.nome if treino else '' }}" required style="width:100%;padding:8px;border-radius:6px"></label></div>
+      <div style="margin-bottom:8px"><label>Aba ID: <input name="aba_id" value="{{ treino.aba_id if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
+      <div style="margin-bottom:8px"><label>Séries: <input name="series" value="{{ treino.series if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
+      <div style="margin-bottom:8px"><label>Repetições: <input name="repeticoes" value="{{ treino.repeticoes if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
+      <div style="margin-bottom:8px"><label>Observações:<br><textarea name="observacoes" rows="4" style="width:100%;padding:8px;border-radius:6px">{{ treino.observacoes if treino else '' }}</textarea></label></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" type="submit">Salvar</button>
+        <a class="ghost small" href="{{ url_for('admin_ver_treinos', login=login) }}">Cancelar</a>
+      </div>
+    </form>
+
+  </div>
+</div>
 """
 
 # ----------------------------
@@ -503,7 +703,7 @@ def index():
         treinos = [t for t in treinos if str(t.get("aba_id")) == str(aba_id)]
     users = carregar_usuarios()
     is_admin = users.get(usuario, {}).get("tipo") == "admin"
-    return render_template_string(MAIN_HTML, usuario=usuario, abas=dados.get("abas", []), treinos=treinos, mensagem=request.args.get("mensagem"), is_admin=is_admin)
+    return render_template_string(MAIN_HTML, abas=dados.get("abas", []), treinos=treinos, mensagem=request.args.get("mensagem"), usuario=usuario, is_admin=is_admin)
 
 @app.route("/exportar", methods=["GET"])
 def exportar():
