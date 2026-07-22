@@ -9,8 +9,8 @@ import base64
 app = Flask(__name__)
 
 # Configurações do GitHub
-GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')  # Adicione no Render
-GITHUB_REPO = "seu-usuario/seu-repo"  # Exemplo: "chagasone/meu-treino"
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+GITHUB_REPO = os.environ.get('GITHUB_REPO', 'kaiochagas/Projetos')
 ARQUIVO_GITHUB = "treinos.json"
 BRANCH = "main"
 
@@ -23,9 +23,8 @@ def carregar_dados():
         
         if response.status_code == 200:
             conteudo = json.loads(base64.b64decode(response.json()['content']))
-            return conteudo, response.json()['sha']  # Retorna SHA para update
+            return conteudo, response.json()['sha']
         else:
-            # Arquivo não existe, criar estrutura inicial
             return {"abas": [], "treinos": []}, None
     except Exception as e:
         print(f"Erro ao carregar: {e}")
@@ -47,7 +46,7 @@ def salvar_dados(dados, sha=None):
         }
         
         if sha:
-            payload["sha"] = sha  # Necessário para update
+            payload["sha"] = sha
         
         response = requests.put(url, json=payload, headers=headers)
         
@@ -529,9 +528,10 @@ def importar():
            return redirect("/?mensagem=Arquivo JSON inválido&tipo=erro")
        
        if 'abas' not in conteudo or 'treinos' not in conteudo:
-           return redirect("/?mensagem=Estrutura de JSON inválida&tipo=erro")
+           return redirect("/?mensagem=Estrutura de JSON inválida. Deve conter 'abas' e 'treinos'&tipo=erro")
        
-       salvar_dados(conteudo)
+       _, sha = carregar_dados()
+       salvar_dados(conteudo, sha)
        return redirect("/?mensagem=Dados importados com sucesso!&tipo=sucesso")
        
    except Exception as e:
@@ -554,7 +554,7 @@ def mesclar():
            return redirect("/?mensagem=Arquivo JSON inválido&tipo=erro")
        
        if 'abas' not in conteudo_novo or 'treinos' not in conteudo_novo:
-           return redirect("/?mensagem=Estrutura de JSON inválida&tipo=erro")
+           return redirect("/?mensagem=Estrutura de JSON inválida. Deve conter 'abas' e 'treinos'&tipo=erro")
        
        dados_atuais, sha = carregar_dados()
        
