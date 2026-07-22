@@ -3,28 +3,62 @@ import json
 import os
 from datetime import datetime
 from io import BytesIO
+import requests
+import base64
 
 app = Flask(__name__)
-ARQUIVO_JSON = "treinos.json"
 
-# Criar arquivo inicial
-if not os.path.exists(ARQUIVO_JSON):
-   dados_iniciais = {
-       "abas": [],
-       "treinos": []
-   }
-   with open(ARQUIVO_JSON, "w", encoding="utf-8") as f:
-       json.dump(dados_iniciais, f, ensure_ascii=False, indent=4)
+# Configurações do GitHub
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')  # Adicione no Render
+GITHUB_REPO = "seu-usuario/seu-repo"  # Exemplo: "chagasone/meu-treino"
+ARQUIVO_GITHUB = "treinos.json"
+BRANCH = "main"
 
-# Carregar dados
 def carregar_dados():
-   with open(ARQUIVO_JSON, "r", encoding="utf-8") as f:
-       return json.load(f)
+    """Carregar do GitHub"""
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{ARQUIVO_GITHUB}?ref={BRANCH}"
+        headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+        response = requests.get(url, headers=headers)
+        
+        if response.status_code == 200:
+            conteudo = json.loads(base64.b64decode(response.json()['content']))
+            return conteudo, response.json()['sha']  # Retorna SHA para update
+        else:
+            # Arquivo não existe, criar estrutura inicial
+            return {"abas": [], "treinos": []}, None
+    except Exception as e:
+        print(f"Erro ao carregar: {e}")
+        return {"abas": [], "treinos": []}, None
 
-# Salvar dados
-def salvar_dados(dados):
-   with open(ARQUIVO_JSON, "w", encoding="utf-8") as f:
-       json.dump(dados, f, ensure_ascii=False, indent=4)
+def salvar_dados(dados, sha=None):
+    """Salvar no GitHub"""
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{ARQUIVO_GITHUB}"
+        headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+        
+        conteudo_json = json.dumps(dados, ensure_ascii=False, indent=4)
+        conteudo_encoded = base64.b64encode(conteudo_json.encode()).decode()
+        
+        payload = {
+            "message": f"Atualizar treinos - {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+            "content": conteudo_encoded,
+            "branch": BRANCH
+        }
+        
+        if sha:
+            payload["sha"] = sha  # Necessário para update
+        
+        response = requests.put(url, json=payload, headers=headers)
+        
+        if response.status_code in [201, 200]:
+            return response.json()['content']['sha']
+        else:
+            print(f"Erro ao salvar: {response.text}")
+            return None
+    except Exception as e:
+        print(f"Erro ao salvar: {e}")
+        return None
 
 HTML = """
 <!DOCTYPE html>
@@ -126,7 +160,6 @@ img{
    margin-top:10px;
 }
 
-/* NOVO: Container responsivo para botões */
 .botoes-container {
    display: flex;
    flex-direction: row;
@@ -200,7 +233,6 @@ input[type="file"]{
    display:block;
 }
 
-/* Media Queries Responsivas */
 @media (max-width: 1024px) {
    .botoes-container {
        gap: 10px;
@@ -445,7 +477,7 @@ onclick="return confirm('Excluir exercício?')"
 
 @app.route("/")
 def index():
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    aba_id = request.args.get("aba")
    treinos = dados["treinos"]
    mensagem = request.args.get("mensagem", "")
@@ -465,11 +497,10 @@ def index():
        tipo_mensagem=tipo_mensagem
    )
 
-# Exportar JSON
 @app.route("/exportar", methods=["GET"])
 def exportar():
    try:
-       dados = carregar_dados()
+       dados, _ = carregar_dados()
        json_str = json.dumps(dados, ensure_ascii=False, indent=4)
        buffer = BytesIO(json_str.encode('utf-8'))
        return send_file(
@@ -481,7 +512,6 @@ def exportar():
    except Exception as e:
        return redirect(f"/?mensagem=Erro ao exportar: {str(e)}&tipo=erro")
 
-# Importar JSON (substituir)
 @app.route("/importar", methods=["POST"])
 def importar():
    try:
@@ -493,24 +523,20 @@ def importar():
        if arquivo.filename == '':
            return redirect("/?mensagem=Nenhum arquivo selecionado&tipo=erro")
        
-       # Validar se é JSON
        try:
            conteudo = json.loads(arquivo.read().decode('utf-8'))
        except json.JSONDecodeError:
            return redirect("/?mensagem=Arquivo JSON inválido&tipo=erro")
        
-       # Validar estrutura básica
        if 'abas' not in conteudo or 'treinos' not in conteudo:
-           return redirect("/?mensagem=Estrutura de JSON inválida. Deve conter 'abas' e 'treinos'&tipo=erro")
+           return redirect("/?mensagem=Estrutura de JSON inválida&tipo=erro")
        
-       # Salvar dados
        salvar_dados(conteudo)
-       return redirect("/?mensagem=Dados importados com sucesso! (Substituído)&tipo=sucesso")
+       return redirect("/?mensagem=Dados importados com sucesso!&tipo=sucesso")
        
    except Exception as e:
        return redirect(f"/?mensagem=Erro ao importar: {str(e)}&tipo=erro")
 
-# Mesclar JSON
 @app.route("/mesclar", methods=["POST"])
 def mesclar():
    try:
@@ -522,42 +548,35 @@ def mesclar():
        if arquivo.filename == '':
            return redirect("/?mensagem=Nenhum arquivo selecionado&tipo=erro")
        
-       # Validar se é JSON
        try:
            conteudo_novo = json.loads(arquivo.read().decode('utf-8'))
        except json.JSONDecodeError:
            return redirect("/?mensagem=Arquivo JSON inválido&tipo=erro")
        
-       # Validar estrutura básica
        if 'abas' not in conteudo_novo or 'treinos' not in conteudo_novo:
-           return redirect("/?mensagem=Estrutura de JSON inválida. Deve conter 'abas' e 'treinos'&tipo=erro")
+           return redirect("/?mensagem=Estrutura de JSON inválida&tipo=erro")
        
-       # Carregar dados atuais
-       dados_atuais = carregar_dados()
+       dados_atuais, sha = carregar_dados()
        
-       # Mesclar abas (sem duplicatas por ID)
        ids_abas_atuais = {aba['id'] for aba in dados_atuais['abas']}
        for aba_nova in conteudo_novo['abas']:
            if aba_nova['id'] not in ids_abas_atuais:
                dados_atuais['abas'].append(aba_nova)
        
-       # Mesclar treinos (sem duplicatas por ID)
        ids_treinos_atuais = {treino['id'] for treino in dados_atuais['treinos']}
        for treino_novo in conteudo_novo['treinos']:
            if treino_novo['id'] not in ids_treinos_atuais:
                dados_atuais['treinos'].append(treino_novo)
        
-       # Salvar dados mesclados
-       salvar_dados(dados_atuais)
+       salvar_dados(dados_atuais, sha)
        return redirect("/?mensagem=Dados mesclados com sucesso!&tipo=sucesso")
        
    except Exception as e:
        return redirect(f"/?mensagem=Erro ao mesclar: {str(e)}&tipo=erro")
 
-# Criar aba
 @app.route("/criar_aba", methods=["POST"])
 def criar_aba():
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    novo_id = 1
    if dados["abas"]:
        novo_id = max(a["id"] for a in dados["abas"]) + 1
@@ -566,13 +585,12 @@ def criar_aba():
        "nome": request.form["nome"]
    }
    dados["abas"].append(nova_aba)
-   salvar_dados(dados)
+   salvar_dados(dados, sha)
    return redirect("/")
 
-# Editar aba
 @app.route("/editar_aba/<int:id>", methods=["GET", "POST"])
 def editar_aba(id):
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    aba = None
    for a in dados["abas"]:
        if a["id"] == id:
@@ -580,7 +598,7 @@ def editar_aba(id):
            break
    if request.method == "POST":
        aba["nome"] = request.form["nome"]
-       salvar_dados(dados)
+       salvar_dados(dados, sha)
        return redirect("/")
    return f"""
 <body style="background:#121212;color:white;font-family:Arial;padding:20px;">
@@ -602,10 +620,9 @@ def editar_aba(id):
 </body>
    """
 
-# Excluir aba
 @app.route("/excluir_aba/<int:id>")
 def excluir_aba(id):
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    dados["abas"] = [
        aba for aba in dados["abas"]
        if aba["id"] != id
@@ -614,13 +631,12 @@ def excluir_aba(id):
        treino for treino in dados["treinos"]
        if treino["aba_id"] != id
    ]
-   salvar_dados(dados)
+   salvar_dados(dados, sha)
    return redirect("/")
 
-# Adicionar exercício
 @app.route("/adicionar", methods=["POST"])
 def adicionar():
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    novo_id = 1
    if dados["treinos"]:
        novo_id = max(t["id"] for t in dados["treinos"]) + 1
@@ -635,13 +651,12 @@ def adicionar():
        "historico": []
    }
    dados["treinos"].append(novo)
-   salvar_dados(dados)
+   salvar_dados(dados, sha)
    return redirect("/?aba=" + request.form["aba_id"])
 
-# Registrar treino
 @app.route("/registrar/<int:id>", methods=["POST"])
 def registrar(id):
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    for treino in dados["treinos"]:
        if treino["id"] == id:
            treino["historico"].append({
@@ -650,24 +665,22 @@ def registrar(id):
                "reps": request.form["reps"]
            })
            break
-   salvar_dados(dados)
+   salvar_dados(dados, sha)
    return redirect("/")
 
-# Excluir exercício
 @app.route("/excluir/<int:id>")
 def excluir(id):
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    dados["treinos"] = [
        treino for treino in dados["treinos"]
        if treino["id"] != id
    ]
-   salvar_dados(dados)
+   salvar_dados(dados, sha)
    return redirect("/")
 
-# Editar exercício
 @app.route("/editar/<int:id>", methods=["GET", "POST"])
 def editar(id):
-   dados = carregar_dados()
+   dados, sha = carregar_dados()
    treino = None
    for t in dados["treinos"]:
        if t["id"] == id:
@@ -679,7 +692,7 @@ def editar(id):
        treino["series"] = request.form["series"]
        treino["repeticoes"] = request.form["repeticoes"]
        treino["observacoes"] = request.form["observacoes"]
-       salvar_dados(dados)
+       salvar_dados(dados, sha)
        return redirect("/")
    return f"""
 <body style="background:#121212;color:white;font-family:Arial;padding:20px;">
@@ -723,7 +736,6 @@ def editar(id):
 </body>
    """
 
-# Iniciar sistema
 if __name__ == "__main__":
    port = os.environ.get('PORT', 5000)
    app.run(
