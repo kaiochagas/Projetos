@@ -179,46 +179,76 @@ body{background:var(--bg);color:var(--text);display:flex;align-items:center;just
 .brand{display:flex;align-items:center;gap:12px}
 .logo{font-size:30px;line-height:1;display:flex;align-items:center}
 .title{font-weight:800;font-size:22px}
-.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
-/* Enforce consistent sizing/alignment for header controls */
-.action-btn, .btn-theme, .actions label.action-btn,
-.actions a.action-btn, .actions button.action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 40px;            /* same height */
-  min-width: 84px;
-  padding: 0 14px;
-  border-radius: 8px;
-  color: #fff;
-  text-decoration: none;
-  border: none;
-  cursor: pointer;
-  font-weight: 700;
-  font-size: 14px;
-  line-height: 1;
-  box-sizing: border-box;
-  vertical-align: middle;
+/* ---------- Header controls: consistent, accessible, usable ---------- */
+:root{
+  --hdr-height: 44px;
+  --hdr-minw: 88px;
+  --hdr-gap: 12px;
+  --btn-radius: 10px;
+  --btn-font-size: 14px;
+  --btn-shadow: 0 6px 20px rgba(0,0,0,0.18);
 }
-
-/* ensure any direct child behaves as intended */
-.actions > * {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  margin: 0 !important;
+.actions{
+  display:flex;
+  gap:var(--hdr-gap);
+  align-items:center;
+  flex-wrap:wrap;
 }
-
-/* color variants */
-.btn-voltar{background:var(--btn-voltar); color:#fff}
-.btn-export{background:var(--btn-export); color:#fff}
-.btn-import{background:var(--btn-import); color:#fff}
-.btn-merge{background:var(--btn-merge); color:#fff}
-.btn-theme{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.06);padding:0 12px; height:40px;}
-
-/* hide native file input */
-.actions input[type="file"] { display: none; }
+.actions a.action-btn,
+.actions button.action-btn,
+.actions label.action-btn,
+.actions .btn-theme {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:var(--hdr-height);
+  min-width:var(--hdr-minw);
+  padding:0 16px;
+  border-radius:var(--btn-radius);
+  font-weight:700;
+  font-size:var(--btn-font-size);
+  color:#fff;
+  text-decoration:none;
+  border:none;
+  background:transparent;
+  cursor:pointer;
+  box-sizing:border-box;
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.actions label.action-btn { cursor:pointer; }
+.btn-voltar{ background:var(--btn-voltar); }
+.btn-export{ background:var(--btn-export); }
+.btn-import{ background:var(--btn-import); }
+.btn-merge { background:var(--btn-merge); }
+.btn-theme{
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid rgba(255,255,255,0.06);
+  min-width: auto;
+  padding: 0 12px;
+}
+.actions a.action-btn:hover,
+.actions button.action-btn:hover,
+.actions label.action-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--btn-shadow);
+  opacity: 0.98;
+}
+.actions a.action-btn:active,
+.actions button.action-btn:active,
+.actions label.action-btn:active { transform: translateY(-1px); }
+.actions a.action-btn:focus,
+.actions button.action-btn:focus,
+.actions label.action-btn:focus,
+.actions .btn-theme:focus {
+  outline: 3px solid rgba(124,92,255,0.18);
+  outline-offset: 2px;
+  box-shadow: 0 8px 28px rgba(124,92,255,0.08);
+}
+.actions input[type="file"] { display:none; }
+.actions > * { display:inline-flex !important; align-items:center !important; justify-content:center !important; margin:0 !important; }
 
 .form{max-width:780px;margin:0 auto}
 .field{margin-bottom:12px}
@@ -239,9 +269,12 @@ button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(25
 .aba a{color:inherit;text-decoration:none}
 .historico{background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;margin-top:10px}
 img{max-width:100%;border-radius:10px;margin-top:10px}
-.action-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0,0,0,0.18); transition: all 120ms ease; }
-
-@media (max-width:720px){.header{flex-direction:column;align-items:flex-start}.title{font-size:18px}.logo{font-size:26px}}
+@media (max-width:520px){
+  .actions{ flex-direction:column; align-items:stretch; }
+  .actions a.action-btn, .actions button.action-btn, .actions label.action-btn, .actions .btn-theme {
+    width:100%; min-width:0; justify-content:center;
+  }
+}
 </style>
 
 <script>
