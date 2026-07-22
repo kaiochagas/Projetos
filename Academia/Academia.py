@@ -1,195 +1,88 @@
 # app.py
-"""
-Aplicação Flask completa com:
-- Autenticação (werkzeug.security)
-- Admin automático Kaio.chagas (senha wk22z*Ox06)
-- Persistência local: usuarios.json e usuarios/<login>.json
-- Painel admin com CRUD de usuários e treinos
-- Criar Treino com opção de criar Aba
-- Exportar / Importar / Mesclar (merge) de JSON de treinos
-- Layout responsivo, tema claro/escuro, emoji de academia
-"""
-
-from flask import Flask, request, redirect, session, send_file, render_template_string, url_for
-import os, json
+from flask import Flask, render_template_string, request, redirect
+import json
+import os
 from datetime import datetime
-from io import BytesIO
-from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
-import copy
-
-# Config
-APP_SECRET = os.environ.get("SECRET_KEY", "sua-chave-secreta-aqui")
-USUARIOS_JSON = "usuarios.json"
-USUARIOS_DIR = "usuarios"
-ADMIN_LOGIN = os.environ.get("ADMIN_LOGIN", "Kaio.chagas")
-ADMIN_NOME = os.environ.get("ADMIN_NOME", "Kaio")
-ADMIN_SOBRENOME = os.environ.get("ADMIN_SOBRENOME", "Chagas")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "wk22z*Ox06")
-
-os.makedirs(USUARIOS_DIR, exist_ok=True)
 
 app = Flask(__name__)
-app.secret_key = APP_SECRET
 
-# Utilities
-def now_iso():
-    return datetime.utcnow().isoformat() + "Z"
+ARQUIVO_JSON = "treinos.json"
 
-def load_json_file(path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return None
-    except Exception:
-        return None
-
-def save_json_file(path, data):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-def usuarios_path():
-    return os.path.join(os.getcwd(), USUARIOS_JSON)
-
-def user_data_path(login):
-    safe = login.replace("/", "_")
-    return os.path.join(os.getcwd(), USUARIOS_DIR, f"{safe}.json")
-
-# Storage functions
-def carregar_usuarios():
-    data = load_json_file(usuarios_path())
-    return data or {}
-
-def salvar_usuarios(data):
-    save_json_file(usuarios_path(), data)
-
-def carregar_dados_usuario(login):
-    p = user_data_path(login)
-    d = load_json_file(p)
-    if d is None:
-        return {"abas": [], "treinos": []}
-    return d
-
-def salvar_dados_usuario(login, dados):
-    p = user_data_path(login)
-    save_json_file(p, dados)
-
-# Ensure admin exists
-def ensure_admin_exists():
-    users = carregar_usuarios()
-    if ADMIN_LOGIN in users:
-        changed = False
-        if users[ADMIN_LOGIN].get("tipo") != "admin":
-            users[ADMIN_LOGIN]["tipo"] = "admin"; changed = True
-        if not users[ADMIN_LOGIN].get("ativo", True):
-            users[ADMIN_LOGIN]["ativo"] = True; changed = True
-        if changed:
-            salvar_usuarios(users)
-        if load_json_file(user_data_path(ADMIN_LOGIN)) is None:
-            salvar_dados_usuario(ADMIN_LOGIN, {"abas": [], "treinos": []})
-        return
-    users[ADMIN_LOGIN] = {
-        "nome": ADMIN_NOME,
-        "sobrenome": ADMIN_SOBRENOME,
-        "senha": generate_password_hash(ADMIN_PASSWORD),
-        "tipo": "admin",
-        "ativo": True,
-        "data_cadastro": now_iso(),
-        "ultimo_acesso": None
+# Criar arquivo inicial
+if not os.path.exists(ARQUIVO_JSON):
+    dados_iniciais = {
+        "abas": [
+            {
+                "id": 1,
+                "nome": "Treino A"
+            }
+        ],
+        "treinos": []
     }
-    salvar_usuarios(users)
-    salvar_dados_usuario(ADMIN_LOGIN, {"abas": [], "treinos": []})
+    with open(ARQUIVO_JSON, "w", encoding="utf-8") as f:
+        json.dump(dados_iniciais, f, ensure_ascii=False, indent=4)
 
-ensure_admin_exists()
+# Carregar dados
+def carregar_dados():
+    with open(ARQUIVO_JSON, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-# Decorators
-def admin_required(f):
-    @wraps(f)
-    def wrapped(*args, **kwargs):
-        if "usuario" not in session:
-            return redirect(url_for("login"))
-        users = carregar_usuarios()
-        u = users.get(session["usuario"])
-        if not u or u.get("tipo") != "admin":
-            return "Acesso negado", 403
-        return f(*args, **kwargs)
-    return wrapped
+# Salvar dados
+def salvar_dados(dados):
+    with open(ARQUIVO_JSON, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=4)
 
-# Merge helper: merges incoming into existing; returns merged dict
-def merge_dados(existing, incoming):
-    existing = copy.deepcopy(existing)
-    inc_abas = incoming.get("abas", []) or []
-    inc_treinos = incoming.get("treinos", []) or []
-
-    # Prepare mapping by aba name (case-insensitive)
-    name_to_id = { (a.get("nome","").strip().lower()): a.get("id") for a in existing.get("abas", []) if a.get("nome") }
-    existing_aba_ids = [a.get("id",0) for a in existing.get("abas",[])]
-    next_aba_id = (max(existing_aba_ids) + 1) if existing_aba_ids else 1
-
-    map_old_to_new = {}
-    for a in inc_abas:
-        name = (a.get("nome") or "").strip()
-        if not name:
-            continue
-        nl = name.lower()
-        if nl in name_to_id:
-            map_old_to_new[a.get("id")] = name_to_id[nl]
-        else:
-            new_id = next_aba_id
-            next_aba_id += 1
-            if "abas" not in existing:
-                existing["abas"] = []
-            existing["abas"].append({"id": new_id, "nome": name})
-            name_to_id[nl] = new_id
-            map_old_to_new[a.get("id")] = new_id
-
-    # Prepare treino ids
-    existing_treino_ids = [t.get("id",0) for t in existing.get("treinos",[])]
-    next_treino_id = (max(existing_treino_ids)+1) if existing_treino_ids else 1
-
-    for t in inc_treinos:
-        new = copy.deepcopy(t)
-        new["id"] = next_treino_id
-        next_treino_id += 1
-        old_aba = new.get("aba_id")
-        if old_aba in map_old_to_new:
-            new["aba_id"] = map_old_to_new[old_aba]
-        else:
-            # if aba id not found, try match by name if ada
-            new["aba_id"] = int(new.get("aba_id") or 0)
-        existing.setdefault("treinos", []).append(new)
-
-    return existing
-
-# Shared head for templates
+# Shared head: styles + theme toggle
 SHARED_HEAD = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{
-  --bg: #121212; --card:#1e1e1e; --text:#fff; --accent:#667eea; --muted:#999; --danger:#e74c3c;
+  --bg: #121212;
+  --card: #1e1e1e;
+  --text: #ffffff;
+  --accent: #667eea;
+  --muted: #9aa0a6;
+  --danger: #e74c3c;
 }
-:root.light{ --bg:#f5f6fb; --card:#fff; --text:#111; --accent:#4f46e5; --muted:#666; --danger:#c0392b; }
+:root.light{
+  --bg: #f5f6fb;
+  --card: #ffffff;
+  --text: #111827;
+  --accent: #4f46e5;
+  --muted: #666666;
+  --danger: #c0392b;
+}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Helvetica Neue", Arial;}
 body{background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;padding:20px;}
-.container{width:100%;max-width:980px;margin:0 auto;}
-.center-card{background:var(--card);padding:24px;border-radius:12px;box-shadow:0 6px 24px rgba(0,0,0,0.25);}
+.container{width:100%;max-width:1100px;margin:0 auto}
+.center-card{background:var(--card);padding:24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.35);}
 .header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
 .brand{display:flex;align-items:center;gap:12px}
 .logo{font-size:28px;line-height:1;display:flex;align-items:center}
 .title{font-weight:800;font-size:20px}
 .actions{display:flex;align-items:center;gap:8px}
-.form{max-width:720px;margin:0 auto}
+.form{max-width:900px;margin:0 auto}
 .field{margin-bottom:12px}
 label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
-input[type="text"],input[type="password"],input[type="number"],textarea,select{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)}
+input[type="text"], input[type="password"], textarea, select{
+  width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)
+}
+textarea{resize:vertical;min-height:100px}
 button.btn{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:600}
 button.ghost{background:transparent;color:var(--text);border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;cursor:pointer}
 .small{padding:6px 10px;font-size:14px}
-.footer-note{font-size:13px;color:var(--muted);margin-top:12px;text-align:center}
-@media (max-width:600px){.header{flex-direction:column;align-items:flex-start}.title{font-size:18px}.logo{font-size:24px}.form{padding:0 10px}}
+.card{background:transparent;padding:20px;border-radius:12px;margin-bottom:20px;border:1px solid rgba(255,255,255,0.03)}
+.aba{display:inline-block;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;margin-right:10px;margin-bottom:10px}
+.aba a{color:var(--text);text-decoration:none}
+.historico{background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;margin-top:10px}
+img{max-width:100%;border-radius:10px;margin-top:10px}
+@media (max-width:720px){
+  .header{flex-direction:column;align-items:flex-start}
+  .title{font-size:18px}
+}
 </style>
+
 <script>
 function initThemeToggle(){
   const root = document.documentElement;
@@ -198,8 +91,7 @@ function initThemeToggle(){
   document.addEventListener('click', function(e){
     if(e.target && e.target.matches('[data-toggle-theme]')){
       root.classList.toggle('light');
-      const isLight = root.classList.contains('light');
-      localStorage.setItem('theme', isLight ? 'light' : 'dark');
+      localStorage.setItem('theme', root.classList.contains('light') ? 'light' : 'dark');
     }
   });
 }
@@ -207,676 +99,268 @@ document.addEventListener('DOMContentLoaded', initThemeToggle);
 </script>
 """
 
-# Templates (updated with export/import/merge and create-aba option)
-LOGIN_HTML = SHARED_HEAD + """
-<div class="container"><div class="center-card">
-  <div class="header">
-    <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Acesse sua rotina</div></div></div>
-    <div class="actions"><button class="ghost small" data-toggle-theme>Alternar Tema</button></div>
-  </div>
-  <div class="form">
-    <h2 style="margin-top:0">Entrar</h2>
-    {% if mensagem %}<div style="background:rgba(255,0,0,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
-    <form method="post" action="{{ url_for('login') }}">
-      <div class="field"><label for="usuario">Usuário:</label><input id="usuario" type="text" name="usuario" required></div>
-      <div class="field"><label for="senha">Senha:</label><input id="senha" type="password" name="senha" required></div>
-      <div style="display:flex;gap:10px;align-items:center"><button class="btn" type="submit">Entrar</button><a href="{{ url_for('registrar') }}" class="ghost small" style="text-decoration:none">Criar conta</a></div>
-    </form>
-  </div>
-</div></div>
-"""
+# Main HTML (updated layout)
+HTML = SHARED_HEAD + """
 
-REGISTRO_HTML = SHARED_HEAD + """
-<div class="container"><div class="center-card">
-  <div class="header">
-    <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Crie sua conta</div></div></div>
-    <div class="actions"><button class="ghost small" data-toggle-theme>Alternar Tema</button></div>
-  </div>
-  <div class="form">
-    <h2 style="margin-top:0">Registrar</h2>
-    {% if mensagem %}<div style="background:rgba(255,0,0,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
-    <form method="post" action="{{ url_for('registrar') }}">
-      <div class="field"><label for="nome">Nome:</label><input id="nome" type="text" name="nome" required></div>
-      <div class="field"><label for="sobrenome">Sobrenome:</label><input id="sobrenome" type="text" name="sobrenome" required></div>
-      <div class="field"><label for="senha">Senha:</label><input id="senha" type="password" name="senha" required placeholder="Crie uma senha segura"></div>
-      <div class="field"><label for="confirmar_senha">Confirmar senha:</label><input id="confirmar_senha" type="password" name="confirmar_senha" required placeholder="Repita a senha"></div>
-      <div style="display:flex;gap:10px;align-items:center"><button class="btn" type="submit">Criar Conta</button><a href="{{ url_for('login') }}" class="ghost small" style="text-decoration:none">Voltar ao Login</a></div>
-    </form>
-  </div>
-</div></div>
-"""
-
-# Main page: include export/import/merge and link to criar treino
-MAIN_HTML = SHARED_HEAD + """
-<div class="container"><div class="center-card">
-  <div class="header">
-    <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Bem-vindo(a)</div></div></div>
-    <div class="actions">
-      <a class="ghost small" href="{{ url_for('criar_treino') }}">Criar Treino</a>
-      <a class="ghost small" href="{{ url_for('exportar') }}">Exportar</a>
-      <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Importar</label>
-      </form>
-      <form method="post" action="{{ url_for('mesclar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Mesclar</label>
-      </form>
-      <a class="ghost small" href="{{ url_for('logout') }}">Sair</a>
-      {% if is_admin %}<a class="btn small" href="{{ url_for('admin_dashboard') }}">Admin</a>{% endif %}
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
-    </div>
-  </div>
-
-  {% if mensagem %}<div style="background:rgba(0,255,0,0.06);padding:10px;border-radius:8px;color:var(--accent);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
-
-  <section style="display:flex;gap:20px;flex-wrap:wrap">
-    <div style="flex:1;min-width:260px">
-      <h3>Abas</h3>
-      {% if abas %}<ul style="color:var(--muted)">{% for aba in abas %}<li>{{ aba.nome }}</li>{% endfor %}</ul>{% else %}<p style="color:var(--muted)">Nenhuma aba criada.</p>{% endif %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<title>Meu Treino</title>
+</head>
+<body>
+<div class="container">
+  <div class="center-card">
+    <div class="header">
+      <div class="brand">
+        <div class="logo">🏋️</div>
+        <div>
+          <div class="title">Meu Treino</div>
+          <div style="font-size:13px;color:var(--muted)">Organize seus treinamentos</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      </div>
     </div>
 
-    <div style="flex:2;min-width:300px">
-      <h3>Treinos</h3>
-      {% if treinos %}
-        {% for t in treinos %}
-          <div style="background:var(--bg);border:1px solid rgba(255,255,255,0.04);padding:12px;border-radius:10px;margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <strong style="font-size:16px">{{ t.nome }}</strong>
-              <div>
-                <a class="ghost small" href="{{ url_for('editar', id=t.id) }}">Editar</a>
-                <a class="ghost small" href="{{ url_for('excluir', id=t.id) }}" onclick="return confirm('Excluir exercício?')">Excluir</a>
-              </div>
-            </div>
-            <p style="margin:6px 0;color:var(--muted)">Séries: {{ t.series }} — Repetições: {{ t.repeticoes }}</p>
-            <p style="margin:6px 0;color:var(--muted)">{{ t.observacoes }}</p>
-            <div>
-              <h4 style="margin:6px 0">Histórico</h4>
-              {% if t.historico %}<ul style="color:var(--muted)">{% for h in t.historico|reverse %}<li>{{ h.data }} — Peso: {{ h.peso }} — Reps: {{ h.reps }}</li>{% endfor %}</ul>{% else %}<p style="color:var(--muted)">Nenhum histórico.</p>{% endif %}
-            </div>
-          </div>
+    <div class="card">
+      <h2 style="margin-top:0">➕ Criar Aba</h2>
+      <form action="/criar_aba" method="POST" class="form">
+        <div class="field">
+          <label for="nome_aba">Nome da aba</label>
+          <input id="nome_aba" type="text" name="nome" placeholder="Ex: Treino A, Perna, Peito..." required>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn" type="submit">Criar Aba</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">📂 Abas</h2>
+      {% for aba in abas %}
+      <div class="aba">
+        <a href="/?aba={{ aba.id }}">{{ aba.nome }}</a> |
+        <a href="/editar_aba/{{ aba.id }}">✏️</a> |
+        <a href="/excluir_aba/{{ aba.id }}" onclick="return confirm('Excluir aba?')">🗑️</a>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0">➕ Adicionar Exercício</h2>
+      <form action="/adicionar" method="POST" class="form">
+        <div class="field"><label>Nome do exercício</label><input type="text" name="nome" required></div>
+        <div class="field"><label>URL da imagem (opcional)</label><input type="text" name="imagem"></div>
+        <div class="field"><label>Séries</label><input type="text" name="series"></div>
+        <div class="field"><label>Repetições</label><input type="text" name="repeticoes"></div>
+        <div class="field"><label>Observações</label><textarea name="observacoes"></textarea></div>
+        <div class="field">
+          <label>Escolha a aba</label>
+          <select name="aba_id" required>
+            <option value="">Escolha a aba</option>
+            {% for aba in abas %}
+            <option value="{{ aba.id }}">{{ aba.nome }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn" type="submit">Adicionar Exercício</button>
+        </div>
+      </form>
+    </div>
+
+    {% for treino in treinos %}
+    <div class="card">
+      <h2 style="margin-top:0">{{ treino.nome }}</h2>
+      {% if treino.imagem %}
+      <img src="{{ treino.imagem }}" alt="{{ treino.nome }}">
+      {% endif %}
+      <p><strong>Séries:</strong> {{ treino.series }}</p>
+      <p><strong>Repetições:</strong> {{ treino.repeticoes }}</p>
+      <p><strong>Observações:</strong> {{ treino.observacoes }}</p>
+
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <a href="/editar/{{ treino.id }}"><button class="ghost small">✏️ Editar</button></a>
+        <a href="/excluir/{{ treino.id }}" onclick="return confirm('Excluir exercício?')"><button class="ghost small">🗑️ Excluir</button></a>
+      </div>
+
+      <form action="/registrar/{{ treino.id }}" method="POST" style="margin-top:12px">
+        <div class="field"><label>Último Peso levantado</label><input type="text" name="peso" placeholder="Peso levantado" required></div>
+        <div class="field"><label>Repetições atingidas</label><input type="text" name="reps" placeholder="Repetições" required></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn" type="submit">Salvar Resultado</button>
+        </div>
+      </form>
+
+      <h3 style="margin-top:12px">📈 Histórico</h3>
+      {% if treino.historico %}
+        {% for item in treino.historico[::-1] %}
+        <div class="historico">
+          <p><b>Data:</b> {{ item.data }}</p>
+          <p><b>Peso:</b> {{ item.peso }}</p>
+          <p><b>Repetições:</b> {{ item.reps }}</p>
+        </div>
         {% endfor %}
       {% else %}
-        <p style="color:var(--muted)">Nenhum treino cadastrado.</p>
+        <p style="color:var(--muted)">Nenhum histórico ainda.</p>
       {% endif %}
     </div>
-  </section>
-</div></div>
-"""
-
-# Create Treino page for user
-CREATE_TREINO_HTML = SHARED_HEAD + """
-<div class="container"><div class="center-card">
-  <div class="header">
-    <div class="brand"><div class="logo">🏋️</div><div><div class="title">Criar Treino</div><div style="font-size:13px;color:var(--muted)">{{ usuario }}</div></div></div>
-    <div class="actions">
-      <a class="ghost small" href="{{ url_for('index') }}">Voltar</a>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
-    </div>
-  </div>
-
-  <form method="post" action="{{ url_for('criar_treino') }}" style="max-width:720px">
-    <div class="field"><label>Nome:</label><input name="nome" required></div>
-
-    <div class="field">
-      <label>Aba existente:</label>
-      <select name="aba_id">
-        <option value="">-- Selecionar aba --</option>
-        {% for aba in abas %}
-          <option value="{{ aba.id }}">{{ aba.nome }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <div class="field">
-      <label>Ou criar nova aba (nome):</label>
-      <input name="nova_aba" placeholder="Ex: Treino A (deixe vazio se não criar)">
-    </div>
-
-    <div class="field"><label>Séries:</label><input name="series"></div>
-    <div class="field"><label>Repetições:</label><input name="repeticoes"></div>
-    <div class="field"><label>Observações:</label><textarea name="observacoes" rows="4"></textarea></div>
-
-    <div style="display:flex;gap:10px;align-items:center">
-      <button class="btn" type="submit">Salvar</button>
-      <a class="ghost small" href="{{ url_for('index') }}">Cancelar</a>
-    </div>
-  </form>
-
-  <div style="margin-top:16px">
-    <h4>Importar / Mesclar</h4>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="ghost small" href="{{ url_for('exportar') }}">Exportar meus treinos</a>
-      <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Importar (substituir)</label>
-      </form>
-      <form method="post" action="{{ url_for('mesclar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Mesclar</label>
-      </form>
-    </div>
-  </div>
-
-</div></div>
-"""
-
-# Admin templates reuse previous ones but admin_ver_treinos will include import/merge/export for target user
-ADMIN_EDIT_TREINO_HTML = SHARED_HEAD + """
-<div class="container"><div class="center-card">
-  <div class="header">
-    <div class="brand"><div class="logo">🏋️</div><div><div class="title">{{ 'Editar' if treino else 'Criar' }} Treino</div><div style="font-size:13px;color:var(--muted)">{{ login }}</div></div></div>
-    <div class="actions">
-      <a class="ghost small" href="{{ url_for('admin_ver_treinos', login=login) }}">Voltar</a>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
-    </div>
-  </div>
-
-  <form method="post" action="" style="max-width:640px">
-    <div style="margin-bottom:8px"><label>Nome: <input name="nome" value="{{ treino.nome if treino else '' }}" required style="width:100%;padding:8px;border-radius:6px"></label></div>
-    <div style="margin-bottom:8px"><label>Aba ID: <input name="aba_id" value="{{ treino.aba_id if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
-    <div style="margin-bottom:8px"><label>Séries: <input name="series" value="{{ treino.series if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
-    <div style="margin-bottom:8px"><label>Repetições: <input name="repeticoes" value="{{ treino.repeticoes if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
-    <div style="margin-bottom:8px"><label>Observações:<br><textarea name="observacoes" rows="4" style="width:100%;padding:8px;border-radius:6px">{{ treino.observacoes if treino else '' }}</textarea></label></div>
-    <div style="display:flex;gap:8px"><button class="btn" type="submit">Salvar</button><a class="ghost small" href="{{ url_for('admin_ver_treinos', login=login) }}">Cancelar</a></div>
-  </form>
-
-</div></div>
-"""
-
-# Admin view training template includes export/import/merge controls for that user
-VIEW_TRAINING_HTML = SHARED_HEAD + """
-<div class="container"><div class="center-card">
-  <div class="header">
-    <div class="brand"><div class="logo">🏋️</div><div><div class="title">Treinos de {{ login }}</div><div style="font-size:13px;color:var(--muted)">Visualização administrativa</div></div></div>
-    <div class="actions">
-      <a class="ghost small" href="{{ url_for('admin_usuarios') }}">Voltar</a>
-      <a class="ghost small" href="{{ url_for('admin_exportar_usuario', login=login) }}">Exportar</a>
-      <form method="post" action="{{ url_for('admin_importar_usuario', login=login) }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Importar</label>
-      </form>
-      <form method="post" action="{{ url_for('admin_mesclar_usuario', login=login) }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Mesclar</label>
-      </form>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
-    </div>
-  </div>
-
-  <h3>Abas</h3>
-  {% if dados.abas %}<ul style="color:var(--muted)">{% for aba in dados.abas %}<li>{{ aba.id }} — {{ aba.nome }}</li>{% endfor %}</ul>{% else %}<p style="color:var(--muted)">Nenhuma aba.</p>{% endif %}
-
-  <h3>Treinos</h3>
-  <p><a class="btn small" href="{{ url_for('admin_criar_treino', login=login) }}">Criar novo treino</a></p>
-  {% if dados.treinos %}
-    {% for t in dados.treinos %}
-      <div style="border:1px solid rgba(255,255,255,0.04);padding:10px;border-radius:8px;margin-bottom:8px">
-        <strong>{{ t.nome }}</strong> (id: {{ t.id }})<br>
-        Séries: {{ t.series }} — Reps: {{ t.repeticoes }}<br>
-        Observações: {{ t.observacoes }}<br>
-        <a class="ghost small" href="{{ url_for('admin_editar_treino', login=login, treino_id=t.id) }}">Editar</a>
-        <a class="ghost small" href="{{ url_for('admin_excluir_treino', login=login, treino_id=t.id) }}" onclick="return confirm('Excluir treino?')">Excluir</a>
-        <a class="ghost small" href="{{ url_for('admin_duplicar_treino', login=login, treino_id=t.id) }}">Duplicar</a>
-        <h4>Histórico</h4>
-        {% if t.historico %}<ul style="color:var(--muted)">{% for h in t.historico %}<li>{{ h.data }} — peso {{ h.peso }} — reps {{ h.reps }}</li>{% endfor %}</ul>{% else %}<p style="color:var(--muted)">Sem histórico</p>{% endif %}
-      </div>
     {% endfor %}
-  {% else %}
-    <p style="color:var(--muted)">Nenhum treino.</p>
-  {% endif %}
-</div></div>
+
+  </div>
+</div>
+</body>
+</html>
 """
 
-# --- Routes: Auth ---
-@app.route("/login", methods=["GET","POST"])
-def login():
-    if request.method=="POST":
-        usuario = request.form.get("usuario","").strip()
-        senha = request.form.get("senha","")
-        users = carregar_usuarios()
-        if usuario not in users:
-            return render_template_string(LOGIN_HTML, mensagem="Usuário não encontrado")
-        u = users[usuario]
-        if not u.get("ativo", True):
-            return render_template_string(LOGIN_HTML, mensagem="Usuário bloqueado. Entre em contato com o administrador.")
-        if not check_password_hash(u["senha"], senha):
-            return render_template_string(LOGIN_HTML, mensagem="Senha incorreta")
-        session["usuario"] = usuario
-        users[usuario]["ultimo_acesso"] = now_iso()
-        salvar_usuarios(users)
-        if users[usuario].get("tipo")=="admin":
-            return redirect(url_for("admin_dashboard"))
-        return redirect(url_for("index"))
-    return render_template_string(LOGIN_HTML)
-
-@app.route("/registrar", methods=["GET","POST"])
-def registrar():
-    if request.method=="POST":
-        nome = request.form.get("nome","").strip()
-        sobrenome = request.form.get("sobrenome","").strip()
-        senha = request.form.get("senha","")
-        confirmar = request.form.get("confirmar_senha","")
-        if not nome or not sobrenome:
-            return render_template_string(REGISTRO_HTML, mensagem="Nome e sobrenome são obrigatórios")
-        if senha != confirmar:
-            return render_template_string(REGISTRO_HTML, mensagem="Senhas não conferem")
-        login_name = f"{nome}.{sobrenome}".lower().replace(" ","")
-        users = carregar_usuarios()
-        if login_name in users:
-            return render_template_string(REGISTRO_HTML, mensagem="Este usuário já existe")
-        users[login_name] = {"nome":nome,"sobrenome":sobrenome,"senha":generate_password_hash(senha),"tipo":"usuario","ativo":True,"data_cadastro":now_iso(),"ultimo_acesso":None}
-        salvar_usuarios(users)
-        salvar_dados_usuario(login_name, {"abas": [], "treinos": []})
-        return render_template_string(REGISTRO_HTML, mensagem=f"Conta criada com sucesso! Usuário: {login_name}")
-    return render_template_string(REGISTRO_HTML)
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-# --- Main user routes ---
 @app.route("/")
 def index():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    dados = carregar_dados_usuario(usuario)
+    dados = carregar_dados()
     aba_id = request.args.get("aba")
-    treinos = dados.get("treinos",[])
+    treinos = dados["treinos"]
     if aba_id:
-        treinos = [t for t in treinos if str(t.get("aba_id"))==str(aba_id)]
-    users = carregar_usuarios()
-    is_admin = users.get(usuario,{}).get("tipo")=="admin"
-    return render_template_string(MAIN_HTML, abas=dados.get("abas",[]), treinos=treinos, mensagem=request.args.get("mensagem"), usuario=usuario, is_admin=is_admin)
+        treinos = [
+            treino for treino in treinos
+            if str(treino["aba_id"]) == aba_id
+        ]
+    return render_template_string(
+        HTML,
+        abas=dados["abas"],
+        treinos=treinos
+    )
 
-@app.route("/exportar", methods=["GET"])
-def exportar():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    dados = carregar_dados_usuario(usuario)
-    json_str = json.dumps(dados, ensure_ascii=False, indent=4)
-    buffer = BytesIO(json_str.encode("utf-8"))
-    return send_file(buffer, mimetype="application/json", as_attachment=True, download_name=f"{usuario}_treinos.json")
+# Criar aba
+@app.route("/criar_aba", methods=["POST"])
+def criar_aba():
+    dados = carregar_dados()
+    novo_id = 1
+    if dados["abas"]:
+        novo_id = max(a["id"] for a in dados["abas"]) + 1
+    nova_aba = {
+        "id": novo_id,
+        "nome": request.form["nome"]
+    }
+    dados["abas"].append(nova_aba)
+    salvar_dados(dados)
+    return redirect("/")
 
-@app.route("/importar", methods=["POST"])
-def importar():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    if "arquivo" not in request.files:
-        return redirect(url_for("index", mensagem="Nenhum arquivo selecionado"))
-    arquivo = request.files["arquivo"]
-    if arquivo.filename == "":
-        return redirect(url_for("index", mensagem="Nenhum arquivo selecionado"))
-    try:
-        conteudo = json.loads(arquivo.read().decode("utf-8"))
-    except Exception:
-        return redirect(url_for("index", mensagem="Arquivo JSON inválido"))
-    if "abas" not in conteudo or "treinos" not in conteudo:
-        return redirect(url_for("index", mensagem="Estrutura inválida"))
-    salvar_dados_usuario(usuario, conteudo)
-    return redirect(url_for("index", mensagem="Dados importados com sucesso!"))
-
-@app.route("/mesclar", methods=["POST"])
-def mesclar():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    if "arquivo" not in request.files:
-        return redirect(url_for("index", mensagem="Nenhum arquivo selecionado"))
-    arquivo = request.files["arquivo"]
-    if arquivo.filename == "":
-        return redirect(url_for("index", mensagem="Nenhum arquivo selecionado"))
-    try:
-        conteudo = json.loads(arquivo.read().decode("utf-8"))
-    except Exception:
-        return redirect(url_for("index", mensagem="Arquivo JSON inválido"))
-    if "abas" not in conteudo or "treinos" not in conteudo:
-        return redirect(url_for("index", mensagem="Estrutura inválida"))
-    atuais = carregar_dados_usuario(usuario)
-    merged = merge_dados(atuais, conteudo)
-    salvar_dados_usuario(usuario, merged)
-    return redirect(url_for("index", mensagem="Dados mesclados com sucesso!"))
-
-@app.route("/criar_treino", methods=["GET","POST"])
-def criar_treino():
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    if request.method=="POST":
-        nome = request.form.get("nome","").strip()
-        if not nome:
-            return redirect(url_for("criar_treino"))
-        nova_aba = (request.form.get("nova_aba") or "").strip()
-        aba_id = request.form.get("aba_id") or ""
-        dados = carregar_dados_usuario(usuario)
-        # handle new aba
-        if nova_aba:
-            existing_ids = [a.get("id",0) for a in dados.get("abas",[])]
-            next_id = max(existing_ids)+1 if existing_ids else 1
-            dados.setdefault("abas",[]).append({"id": next_id, "nome": nova_aba})
-            uso_aba = next_id
-        else:
-            uso_aba = int(aba_id) if aba_id else 0
-        # treino id
-        treino_ids = [t.get("id",0) for t in dados.get("treinos",[])]
-        novo_id = max(treino_ids)+1 if treino_ids else 1
-        treino = {
-            "id": novo_id,
-            "aba_id": int(uso_aba),
-            "nome": nome,
-            "imagem": "",
-            "series": request.form.get("series",""),
-            "repeticoes": request.form.get("repeticoes",""),
-            "observacoes": request.form.get("observacoes",""),
-            "historico": []
-        }
-        dados.setdefault("treinos",[]).append(treino)
-        salvar_dados_usuario(usuario, dados)
-        return redirect(url_for("index"))
-    # GET
-    dados = carregar_dados_usuario(session["usuario"])
-    return render_template_string(CREATE_TREINO_HTML, abas=dados.get("abas",[]), usuario=session["usuario"])
-
-@app.route("/adicionar", methods=["POST"])
-def adicionar():
-    # compat (keeps previous endpoint) - same as criar_treino POST
-    return criar_treino()
-
-@app.route("/registrar/<int:id>", methods=["POST"])
-def registrar_treino(id):
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    dados = carregar_dados_usuario(usuario)
-    for t in dados.get("treinos", []):
-        if t.get("id")==id:
-            t.setdefault("historico",[]).append({"data": datetime.now().strftime("%d/%m/%Y %H:%M"), "peso": request.form.get("peso"), "reps": request.form.get("reps")})
+# Editar aba
+@app.route("/editar_aba/<int:id>", methods=["GET", "POST"])
+def editar_aba(id):
+    dados = carregar_dados()
+    aba = None
+    for a in dados["abas"]:
+        if a["id"] == id:
+            aba = a
             break
-    salvar_dados_usuario(usuario, dados)
-    return redirect(url_for("index"))
-
-@app.route("/excluir/<int:id>")
-def excluir(id):
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    dados = carregar_dados_usuario(usuario)
-    dados["treinos"] = [t for t in dados.get("treinos",[]) if t.get("id")!=id]
-    salvar_dados_usuario(usuario, dados)
-    return redirect(url_for("index"))
-
-@app.route("/editar/<int:id>", methods=["GET","POST"])
-def editar(id):
-    if "usuario" not in session:
-        return redirect(url_for("login"))
-    usuario = session["usuario"]
-    dados = carregar_dados_usuario(usuario)
-    treino = next((t for t in dados.get("treinos",[]) if t.get("id")==id), None)
-    if not treino:
-        return "Treino não encontrado", 404
-    if request.method=="POST":
-        treino["nome"] = request.form.get("nome", treino.get("nome"))
-        treino["imagem"] = request.form.get("imagem", treino.get("imagem"))
-        treino["series"] = request.form.get("series", treino.get("series"))
-        treino["repeticoes"] = request.form.get("repeticoes", treino.get("repeticoes"))
-        treino["observacoes"] = request.form.get("observacoes", treino.get("observacoes"))
-        salvar_dados_usuario(usuario, dados)
-        return redirect(url_for("index"))
+    if request.method == "POST":
+        aba["nome"] = request.form["nome"]
+        salvar_dados(dados)
+        return redirect("/")
     return f"""
-    <body style="font-family:Arial;padding:20px;">
-      <h1>Editar Exercício</h1>
-      <form method="post">
-        <input name="nome" value="{treino.get('nome','')}" required><br><br>
-        <input name="imagem" value="{treino.get('imagem','')}"><br><br>
-        <input name="series" value="{treino.get('series','')}"><br><br>
-        <input name="repeticoes" value="{treino.get('repeticoes','')}"><br><br>
-        <textarea name="observacoes">{treino.get('observacoes','')}</textarea><br><br>
-        <button type="submit">Salvar</button>
-      </form>
+    <body style="background:var(--bg);color:var(--text);font-family:Arial;padding:20px;">
+    <h1>✏️ Editar Aba</h1>
+    <form method="POST">
+        <input type="text" name="nome" value="{aba['nome']}" style="width:100%;padding:12px;border:none;border-radius:10px;">
+        <button type="submit" style="width:100%;padding:12px;margin-top:10px;background:#0984e3;color:white;border:none;border-radius:10px;">Salvar</button>
+    </form>
     </body>
     """
 
-# --- Admin routes ---
-@app.route("/admin")
-@admin_required
-def admin_dashboard():
-    users = carregar_usuarios()
-    total = len(users)
-    ativos = sum(1 for u in users.values() if u.get("ativo",True))
-    bloqueados = total - ativos
-    total_treinos = sum(len(carregar_dados_usuario(login).get("treinos",[])) for login in users.keys())
-    recent_regs = sorted(users.items(), key=lambda kv: kv[1].get("data_cadastro",""), reverse=True)[:5]
-    recent_access = sorted(users.items(), key=lambda kv: kv[1].get("ultimo_acesso") or "", reverse=True)[:5]
-    return render_template_string(SHARED_HEAD + """
-    <div class="container"><div class="center-card">
-      <div class="header"><div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino — Admin</div><div style="font-size:13px;color:var(--muted)">Painel administrativo</div></div></div>
-      <div class="actions"><a class="ghost small" href="{{ url_for('admin_usuarios') }}">Gerenciar Usuários</a><a class="ghost small" href='{{ url_for("index") }}'>Voltar</a><button class="ghost small" data-toggle-theme>Alternar Tema</button></div></div>
-      <div style="display:flex;gap:18px;flex-wrap:wrap"><div style="flex:1;min-width:220px">
-      <h3>Resumo</h3><ul style="color:var(--muted)"><li>Total de usuários: {{ total }}</li><li>Usuários ativos: {{ ativos }}</li><li>Usuários bloqueados: {{ bloqueados }}</li><li>Total de treinos: {{ total_treinos }}</li></ul></div>
-      <div style="flex:2;min-width:300px"><h3>Últimos registros</h3><ul style="color:var(--muted)">{% for login, meta in recent_regs %}<li>{{ login }} — {{ meta.data_cadastro }}</li>{% endfor %}</ul><h3>Últimos acessos</h3><ul style="color:var(--muted)">{% for login, meta in recent_access %}<li>{{ login }} — {{ meta.ultimo_acesso or "-" }}</li>{% endfor %}</ul></div></div></div></div>
-    """, total=total, ativos=ativos, bloqueados=bloqueados, total_treinos=total_treinos, recent_regs=recent_regs, recent_access=recent_access)
+# Excluir aba
+@app.route("/excluir_aba/<int:id>")
+def excluir_aba(id):
+    dados = carregar_dados()
+    dados["abas"] = [
+        aba for aba in dados["abas"]
+        if aba["id"] != id
+    ]
+    dados["treinos"] = [
+        treino for treino in dados["treinos"]
+        if treino["aba_id"] != id
+    ]
+    salvar_dados(dados)
+    return redirect("/")
 
-@app.route("/admin/usuarios")
-@admin_required
-def admin_usuarios():
-    q = (request.args.get("q") or "").strip().lower()
-    users = carregar_usuarios()
-    items = []
-    for login, meta in users.items():
-        if q:
-            if q not in login.lower() and q not in meta.get("nome","").lower() and q not in meta.get("sobrenome","").lower():
-                continue
-        items.append((login, meta))
-    items_sorted = sorted(items, key=lambda kv: kv[0].lower())
-    return render_template_string(SHARED_HEAD + """
-    <div class="container"><div class="center-card"><div class="header"><div class="brand"><div class="logo">🏋️</div><div><div class="title">Usuários</div><div style="font-size:13px;color:var(--muted)">Gerenciar contas</div></div></div><div class="actions"><a class="ghost small" href="{{ url_for('admin_dashboard') }}">Dashboard</a><button class="ghost small" data-toggle-theme>Alternar Tema</button></div></div>
-    <form method="get" action="{{ url_for('admin_usuarios') }}" style="margin-bottom:12px"><input name="q" placeholder="Pesquisar..." value="{{ query }}" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);width:60%;max-width:360px"><button class="btn small" type="submit">Pesquisar</button><a href="{{ url_for('admin_usuarios') }}" class="ghost small" style="margin-left:8px">Limpar</a></form>
-    <div style="overflow:auto"><table border="0" cellpadding="8" style="width:100%;border-collapse:collapse;color:var(--text)"><thead style="text-align:left;color:var(--muted)"><tr><th>Usuário</th><th>Nome</th><th>Tipo</th><th>Status</th><th>Cadastro</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>{% for login, meta in users %}<tr style="border-top:1px solid rgba(255,255,255,0.03)"><td>{{ login }}</td><td>{{ meta.nome }} {{ meta.sobrenome }}</td><td>{{ meta.tipo }}</td><td>{{ 'Ativo' if meta.ativo else 'Bloqueado' }}</td><td>{{ meta.data_cadastro }}</td><td>{{ meta.ultimo_acesso or '-' }}</td><td><a class="ghost small" href='{{ url_for("admin_ver_treinos", login=login) }}'>Ver</a> <a class="ghost small" href='{{ url_for("admin_editar_usuario", login=login) }}'>Editar</a> {% if meta.ativo %}<form style="display:inline" method="post" action="{{ url_for('admin_bloquear', login=login) }}"><button class="ghost small" type="submit">Bloquear</button></form>{% else %}<form style="display:inline" method="post" action="{{ url_for('admin_desbloquear', login=login) }}"><button class="ghost small" type="submit">Desbloquear</button></form>{% endif %} {% if login != ADMIN_LOGIN %}<form style="display:inline" method="post" action="{{ url_for('admin_excluir', login=login) }}" onsubmit="return confirm('Confirma exclusão de ' + '{{login}}' + ' ?');"><button class="ghost small" type="submit">Excluir</button></form>{% endif %} <form style="display:inline" method="post" action='{{ url_for("admin_reset_senha", login=login) }}'><input type="password" name="nova_senha" placeholder="Nova senha" style="padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.06)"><button class="ghost small" type="submit">Resetar</button></form></td></tr>{% endfor %}</tbody></table></div><p style="margin-top:12px"><a href="{{ url_for('admin_dashboard') }}">Voltar ao Dashboard</a></p></div></div>
-    """, users=items_sorted, query=q, ADMIN_LOGIN=ADMIN_LOGIN)
+# Adicionar exercício
+@app.route("/adicionar", methods=["POST"])
+def adicionar():
+    dados = carregar_dados()
+    novo_id = 1
+    if dados["treinos"]:
+        novo_id = max(t["id"] for t in dados["treinos"]) + 1
+    novo = {
+        "id": novo_id,
+        "aba_id": int(request.form["aba_id"]),
+        "nome": request.form["nome"],
+        "imagem": request.form["imagem"],
+        "series": request.form["series"],
+        "repeticoes": request.form["repeticoes"],
+        "observacoes": request.form["observacoes"],
+        "historico": []
+    }
+    dados["treinos"].append(novo)
+    salvar_dados(dados)
+    return redirect("/?aba=" + request.form["aba_id"])
 
-@app.route("/admin/usuario/editar/<login>", methods=["GET","POST"])
-@admin_required
-def admin_editar_usuario(login):
-    users = carregar_usuarios()
-    if login not in users:
-        return "Usuário não encontrado", 404
-    meta = users[login]
-    if request.method=="POST":
-        novo_login = (request.form.get("login") or "").strip()
-        nome = (request.form.get("nome") or "").strip()
-        sobrenome = (request.form.get("sobrenome") or "").strip()
-        tipo = (request.form.get("tipo") or meta.get("tipo"))
-        ativo = request.form.get("ativo") == "on"
-        nova_senha = request.form.get("nova_senha","").strip()
-        if login == ADMIN_LOGIN:
-            tipo = "admin"; ativo = True
-        if session.get("usuario")==login and tipo!="admin":
-            tipo="admin"
-        if not novo_login:
-            return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta, mensagem="Login inválido")
-        if not nome or not sobrenome:
-            return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta, mensagem="Nome/sobrenome inválidos")
-        users = carregar_usuarios()
-        meta = users.pop(login)
-        meta["nome"]=nome; meta["sobrenome"]=sobrenome; meta["tipo"]=tipo; meta["ativo"]=bool(ativo)
-        if nova_senha: meta["senha"]=generate_password_hash(nova_senha)
-        if novo_login != login:
-            if novo_login in users:
-                users[login]=meta; salvar_usuarios(users)
-                return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta, mensagem="Novo login já existe")
-            old_path = user_data_path(login); new_path = user_data_path(novo_login)
-            if os.path.exists(old_path): os.replace(old_path, new_path)
-            users[novo_login]=meta
-        else:
-            users[login]=meta
-        salvar_usuarios(users)
-        return redirect(url_for("admin_usuarios"))
-    return render_template_string(SHARED_HEAD + ADMIN_EDIT_TREINO_HTML, login=login, meta=meta)
+# Registrar treino
+@app.route("/registrar/<int:id>", methods=["POST"])
+def registrar(id):
+    dados = carregar_dados()
+    for treino in dados["treinos"]:
+        if treino["id"] == id:
+            treino["historico"].append({
+                "data": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                "peso": request.form["peso"],
+                "reps": request.form["reps"]
+            })
+            break
+    salvar_dados(dados)
+    return redirect("/")
 
-@app.route("/admin/usuario/reset_senha/<login>", methods=["POST"])
-@admin_required
-def admin_reset_senha(login):
-    if login==ADMIN_LOGIN:
-        return "Não é permitido alterar a senha do admin por aqui.", 403
-    nova = (request.form.get("nova_senha") or "").strip()
-    if not nova:
-        return redirect(url_for("admin_usuarios"))
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    users[login]["senha"] = generate_password_hash(nova)
-    salvar_usuarios(users)
-    return redirect(url_for("admin_usuarios"))
+# Excluir exercício
+@app.route("/excluir/<int:id>")
+def excluir(id):
+    dados = carregar_dados()
+    dados["treinos"] = [
+        treino for treino in dados["treinos"]
+        if treino["id"] != id
+    ]
+    salvar_dados(dados)
+    return redirect("/")
 
-@app.route("/admin/usuario/bloquear/<login>", methods=["POST"])
-@admin_required
-def admin_bloquear(login):
-    if login==ADMIN_LOGIN: return "Não é permitido bloquear o admin.", 403
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    users[login]["ativo"]=False; salvar_usuarios(users)
-    return redirect(url_for("admin_usuarios"))
+# Editar exercício
+@app.route("/editar/<int:id>", methods=["GET", "POST"])
+def editar(id):
+    dados = carregar_dados()
+    treino = None
+    for t in dados["treinos"]:
+        if t["id"] == id:
+            treino = t
+            break
+    if request.method == "POST":
+        treino["nome"] = request.form["nome"]
+        treino["imagem"] = request.form["imagem"]
+        treino["series"] = request.form["series"]
+        treino["repeticoes"] = request.form["repeticoes"]
+        treino["observacoes"] = request.form["observacoes"]
+        salvar_dados(dados)
+        return redirect("/")
+    return f"""
+    <body style="background:var(--bg);color:var(--text);font-family:Arial;padding:20px;">
+    <h1>✏️ Editar Exercício</h1>
+    <form method="POST">
+        <input type="text" name="nome" value="{treino['nome']}" style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;">
+        <input type="text" name="imagem" value="{treino['imagem']}" style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;">
+        <input type="text" name="series" value="{treino['series']}" style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;">
+        <input type="text" name="repeticoes" value="{treino['repeticoes']}" style="width:100%;padding:12px;margin-top:10px;border:none;border-radius:10px;">
+        <textarea name="observacoes" style="width:100%;height:100px;padding:12px;margin-top:10px;border:none;border-radius:10px;">{treino['observacoes']}</textarea>
+        <button type="submit" style="width:100%;padding:12px;margin-top:10px;background:#0984e3;color:white;border:none;border-radius:10px;">Salvar</button>
+    </form>
+    </body>
+    """
 
-@app.route("/admin/usuario/desbloquear/<login>", methods=["POST"])
-@admin_required
-def admin_desbloquear(login):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    users[login]["ativo"]=True; salvar_usuarios(users)
-    return redirect(url_for("admin_usuarios"))
-
-@app.route("/admin/usuario/excluir/<login>", methods=["POST"])
-@admin_required
-def admin_excluir(login):
-    if login==ADMIN_LOGIN: return "Não é permitido excluir o admin.", 403
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    users.pop(login); salvar_usuarios(users)
-    p = user_data_path(login)
-    if os.path.exists(p): os.remove(p)
-    return redirect(url_for("admin_usuarios"))
-
-@app.route("/admin/usuario/treinos/<login>")
-@admin_required
-def admin_ver_treinos(login):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    dados = carregar_dados_usuario(login)
-    return render_template_string(VIEW_TRAINING_HTML, login=login, dados=dados)
-
-# Admin export/import/merge for a specific user
-@app.route("/admin/usuario/<login>/exportar")
-@admin_required
-def admin_exportar_usuario(login):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    dados = carregar_dados_usuario(login)
-    json_str = json.dumps(dados, ensure_ascii=False, indent=4)
-    buffer = BytesIO(json_str.encode("utf-8"))
-    return send_file(buffer, mimetype="application/json", as_attachment=True, download_name=f"{login}_treinos.json")
-
-@app.route("/admin/usuario/<login>/importar", methods=["POST"])
-@admin_required
-def admin_importar_usuario(login):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    if "arquivo" not in request.files: return redirect(url_for("admin_ver_treinos", login=login))
-    arquivo = request.files["arquivo"]
-    if arquivo.filename == "": return redirect(url_for("admin_ver_treinos", login=login))
-    try:
-        conteudo = json.loads(arquivo.read().decode("utf-8"))
-    except Exception:
-        return redirect(url_for("admin_ver_treinos", login=login))
-    if "abas" not in conteudo or "treinos" not in conteudo:
-        return redirect(url_for("admin_ver_treinos", login=login))
-    salvar_dados_usuario(login, conteudo)
-    return redirect(url_for("admin_ver_treinos", login=login))
-
-@app.route("/admin/usuario/<login>/mesclar", methods=["POST"])
-@admin_required
-def admin_mesclar_usuario(login):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    if "arquivo" not in request.files: return redirect(url_for("admin_ver_treinos", login=login))
-    arquivo = request.files["arquivo"]
-    if arquivo.filename == "": return redirect(url_for("admin_ver_treinos", login=login))
-    try:
-        conteudo = json.loads(arquivo.read().decode("utf-8"))
-    except Exception:
-        return redirect(url_for("admin_ver_treinos", login=login))
-    if "abas" not in conteudo or "treinos" not in conteudo:
-        return redirect(url_for("admin_ver_treinos", login=login))
-    atuais = carregar_dados_usuario(login)
-    merged = merge_dados(atuais, conteudo)
-    salvar_dados_usuario(login, merged)
-    return redirect(url_for("admin_ver_treinos", login=login))
-
-# Admin create/edit treino for user (reuse admin edit template)
-@app.route("/admin/usuario/<login>/treino/criar", methods=["GET","POST"])
-@admin_required
-def admin_criar_treino(login):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    if request.method=="POST":
-        dados = carregar_dados_usuario(login)
-        novo_id = max((t.get("id",0) for t in dados.get("treinos",[])), default=0) + 1
-        treino = {
-            "id": novo_id,
-            "aba_id": int(request.form.get("aba_id") or 0),
-            "nome": request.form.get("nome",""),
-            "imagem": "",
-            "series": request.form.get("series",""),
-            "repeticoes": request.form.get("repeticoes",""),
-            "observacoes": request.form.get("observacoes",""),
-            "historico": []
-        }
-        dados.setdefault("treinos",[]).append(treino)
-        salvar_dados_usuario(login, dados)
-        return redirect(url_for("admin_ver_treinos", login=login))
-    return render_template_string(ADMIN_EDIT_TREINO_HTML, login=login, treino=None)
-
-@app.route("/admin/usuario/<login>/treino/<int:treino_id>/editar", methods=["GET","POST"])
-@admin_required
-def admin_editar_treino(login, treino_id):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    dados = carregar_dados_usuario(login)
-    treino = next((t for t in dados.get("treinos",[]) if t.get("id")==treino_id), None)
-    if not treino: return "Treino não encontrado", 404
-    if request.method=="POST":
-        treino["nome"] = request.form.get("nome", treino.get("nome"))
-        treino["aba_id"] = int(request.form.get("aba_id") or treino.get("aba_id",0))
-        treino["series"] = request.form.get("series", treino.get("series"))
-        treino["repeticoes"] = request.form.get("repeticoes", treino.get("repeticoes"))
-        treino["observacoes"] = request.form.get("observacoes", treino.get("observacoes"))
-        salvar_dados_usuario(login, dados)
-        return redirect(url_for("admin_ver_treinos", login=login))
-    return render_template_string(ADMIN_EDIT_TREINO_HTML, login=login, treino=treino)
-
-@app.route("/admin/usuario/<login>/treino/<int:treino_id>/excluir")
-@admin_required
-def admin_excluir_treino(login, treino_id):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    dados = carregar_dados_usuario(login)
-    dados["treinos"] = [t for t in dados.get("treinos",[]) if t.get("id")!=treino_id]
-    salvar_dados_usuario(login, dados)
-    return redirect(url_for("admin_ver_treinos", login=login))
-
-@app.route("/admin/usuario/<login>/treino/<int:treino_id>/duplicar")
-@admin_required
-def admin_duplicar_treino(login, treino_id):
-    users = carregar_usuarios()
-    if login not in users: return "Usuário não encontrado", 404
-    dados = carregar_dados_usuario(login)
-    treino = next((t for t in dados.get("treinos",[]) if t.get("id")==treino_id), None)
-    if not treino: return "Treino não encontrado", 404
-    novo_id = max((t.get("id",0) for t in dados.get("treinos",[])), default=0) + 1
-    novo = copy.deepcopy(treino)
-    novo["id"] = novo_id
-    novo["nome"] = f"{novo.get('nome','')}_copy"
-    dados.setdefault("treinos",[]).append(novo)
-    salvar_dados_usuario(login, dados)
-    return redirect(url_for("admin_ver_treinos", login=login))
-
-# Run
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)
