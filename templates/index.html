@@ -1,117 +1,98 @@
-<!doctype html>
-<html lang="pt-br">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>Controle de Guarda das Filhas</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-      body {
-        min-height: 100vh;
-        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-      }
-      .page-container {
-        max-width: 760px;
-        margin: 0 auto;
-        padding: 24px 16px 40px;
-      }
-      .card-app {
-        border: none;
-        border-radius: 20px;
-        box-shadow: 0 16px 45px rgba(46, 61, 73, 0.12);
-      }
-      .card-body {
-        padding: 32px;
-      }
-      .page-title {
-        font-size: clamp(1.7rem, 2.5vw, 2.4rem);
-        letter-spacing: 0.02em;
-      }
-      .form-label {
-        font-weight: 600;
-      }
-      .btn-wide {
-        min-width: 160px;
-      }
-      .resultado {
-        min-height: 96px;
-        line-height: 1.5;
-        white-space: pre-line;
-      }
-      .resultado.alert {
-        border-radius: 18px;
-      }
-      @media (max-width: 575px) {
-        .card-body {
-          padding: 22px;
-        }
-        .btn-wide {
-          width: 100%;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="page-container">
-      <div class="card card-app">
-        <div class="card-body">
-          <h1 class="page-title mb-4 text-center">Controle de Guarda das Filhas</h1>
-
-          <form id="form" class="mb-4">
-            <div class="row g-3">
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="data_referencia">Data em que você estava com suas filhas</label>
-                <input type="date" class="form-control" id="data_referencia" name="data_referencia" value="{{ today }}">
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label" for="data_evento">Data do evento</label>
-                <input type="date" class="form-control" id="data_evento" name="data_evento" value="{{ today }}">
-              </div>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>👧 Controle de Guarda das Filhas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>👧 CONTROLE DE GUARDA DAS FILHAS</h1>
+            <div class="theme-toggle">
+                <button id="btnTemaClaro" class="btn-tema ativo">☀ Claro</button>
+                <button id="btnTemaEscuro" class="btn-tema">🌙 Escuro</button>
             </div>
+        </header>
 
-            <div class="row g-3 mt-4">
-              <div class="col-12 col-md-6 d-grid">
-                <button type="button" id="verificar" class="btn btn-primary btn-wide">Verificar Evento</button>
-              </div>
-              <div class="col-12 col-md-6 d-grid">
-                <button type="button" id="listar" class="btn btn-outline-secondary btn-wide">Próximos Finais de Semana</button>
-              </div>
-            </div>
-          </form>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Seção de Entrada -->
+            <section class="entrada-section">
+                <div class="form-group">
+                    <label for="dataReferencia">📅 Data em que você estava com suas filhas</label>
+                    <input type="date" id="dataReferencia" required>
+                </div>
 
-          <div id="resultado" class="resultado alert d-none"></div>
-        </div>
-      </div>
+                <div class="form-group">
+                    <label for="dataEvento">📅 Data do evento</label>
+                    <input type="date" id="dataEvento" required>
+                </div>
+
+                <!-- Botões Principais -->
+                <div class="buttons-container">
+                    <button id="btnDashboard" class="btn btn-primary">📊 Dashboard</button>
+                    <button id="btnPesquisar" class="btn btn-primary">🔍 Pesquisar Data</button>
+                    <button id="btnCalendario" class="btn btn-primary">📆 Calendário Visual</button>
+                </div>
+
+                <!-- Botões Secundários -->
+                <div class="buttons-container">
+                    <button id="btnPeriodos" class="btn btn-secondary">📋 Períodos</button>
+                    <button id="btnPDF" class="btn btn-secondary">📄 Exportar PDF</button>
+                    <button id="btnExcel" class="btn btn-secondary">📊 Exportar Excel</button>
+                    <button id="btnWhatsApp" class="btn btn-secondary">💬 Copiar WhatsApp</button>
+                    <button id="btnHistorico" class="btn btn-secondary">📋 Histórico</button>
+                </div>
+            </section>
+
+            <!-- Resultado -->
+            <div id="resultado" class="resultado"></div>
+        </main>
     </div>
 
-    <script>
-      const resultadoEl = document.getElementById('resultado');
+    <!-- Modal Dashboard -->
+    <div id="modalDashboard" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="dashboardContent"></div>
+        </div>
+    </div>
 
-      async function verificarEvento() {
-        const form = document.getElementById('form');
-        const data = new FormData(form);
-        const resp = await fetch('/verificar', { method: 'POST', body: data });
-        const json = await resp.json();
+    <!-- Modal Calendário -->
+    <div id="modalCalendario" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close">&times;</span>
+            <div id="calendarioContent"></div>
+        </div>
+    </div>
 
-        resultadoEl.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning');
+    <!-- Modal Períodos -->
+    <div id="modalPeriodos" class="modal">
+        <div class="modal-content modal-large">
+            <span class="close">&times;</span>
+            <div id="periodosContent"></div>
+        </div>
+    </div>
 
-        if (json.error) {
-          resultadoEl.textContent = json.error;
-          resultadoEl.classList.add('alert', 'alert-warning');
-          return;
-        }
+    <!-- Modal Pesquisa -->
+    <div id="modalPesquisa" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="pesquisaContent"></div>
+        </div>
+    </div>
 
-        resultadoEl.textContent = json.text;
-        resultadoEl.classList.add('alert', json.color === 'success' ? 'alert-success' : 'alert-danger');
-      }
+    <!-- Modal Histórico -->
+    <div id="modalHistorico" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <div id="historicoContent"></div>
+        </div>
+    </div>
 
-      document.getElementById('verificar').addEventListener('click', verificarEvento);
-
-      document.getElementById('listar').addEventListener('click', () => {
-        const ref = document.getElementById('data_referencia').value;
-        const url = '/listar' + (ref ? `?data_referencia=${ref}` : '');
-        window.location.href = url;
-      });
-    </script>
-  </body>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
 </html>
