@@ -8,7 +8,7 @@ Aplicação Flask completa (único arquivo) com:
 - Criar Treino com opção de criar Aba (AJAX) + campo URL de imagem
 - Exportar / Importar / Mesclar (merge) de JSON de treinos
 - Layout responsivo, tema claro/escuro, emoji de academia
-- Ajustes visuais nos botões do cabeçalho (cores/tamanhos/alinhamento)
+- Abas visíveis (botões coloridos) e ações do cabeçalho como botões coloridos
 """
 
 from flask import Flask, render_template_string, request, redirect, session, send_file, url_for, jsonify
@@ -164,8 +164,11 @@ SHARED_HEAD = """
 <style>
 :root{
   --bg: #121212; --card:#1e1e1e; --text:#fff; --accent:#7c5cff; --muted:#9aa0a6; --danger:#e74c3c;
+  --btn-voltar:#6b7280; --btn-export:#10b981; --btn-import:#3b82f6; --btn-merge:#8b5cf6;
 }
-:root.light{ --bg:#f5f6fb; --card:#fff; --text:#111827; --accent:#4f46e5; --muted:#666; --danger:#c0392b; }
+:root.light{ --bg:#f5f6fb; --card:#fff; --text:#111827; --accent:#4f46e5; --muted:#666; --danger:#c0392b;
+  --btn-voltar:#6b7280; --btn-export:#059669; --btn-import:#2563eb; --btn-merge:#7c3aed;
+}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Helvetica Neue", Arial;}
 body{background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;padding:20px;}
@@ -175,21 +178,33 @@ body{background:var(--bg);color:var(--text);display:flex;align-items:center;just
 .brand{display:flex;align-items:center;gap:12px}
 .logo{font-size:30px;line-height:1;display:flex;align-items:center}
 .title{font-weight:800;font-size:22px}
-.actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.actions a, .actions label, .actions button{ color:var(--accent); text-decoration:none; font-weight:600; font-size:14px; }
+.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.action-btn{padding:8px 12px;border-radius:8px;color:#fff;text-decoration:none;border:none;cursor:pointer;font-weight:700}
+.btn-voltar{background:var(--btn-voltar); color:#fff}
+.btn-export{background:var(--btn-export); color:#fff}
+.btn-import{background:var(--btn-import); color:#fff}
+.btn-merge{background:var(--btn-merge); color:#fff}
+.btn-theme{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;cursor:pointer}
 .form{max-width:780px;margin:0 auto}
 .field{margin-bottom:12px}
 label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
 input[type="text"],input[type="password"],input[type="number"],textarea,select{
   width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)
 }
+/* Make select/options more visible */
+select { background: var(--card); color: var(--text); border:1px solid rgba(255,255,255,0.06); padding:8px; border-radius:8px; -webkit-appearance:none; -moz-appearance:none; appearance:none;}
+select option { background: var(--card); color: var(--text); }
+/* for some browsers we add option hover style */
+select:focus, select:hover { outline:none; box-shadow:0 0 0 3px rgba(124,92,255,0.12); }
+
 textarea{resize:vertical;min-height:100px}
 button.btn{background:var(--accent);color:white;border:none;padding:10px 14px;border-radius:8px;cursor:pointer;font-weight:700}
 button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(255,255,255,0.04);padding:8px 12px;border-radius:8px;cursor:pointer}
 .small{padding:6px 10px;font-size:14px}
 .card{background:transparent;padding:20px;border-radius:12px;margin-bottom:20px;border:1px solid rgba(255,255,255,0.03)}
-.aba{display:inline-block;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;margin-right:10px;margin-bottom:10px}
-.aba a{color:var(--text);text-decoration:none}
+/* Abas: colored pills so they never blend into background */
+.aba{display:inline-block;background:var(--accent);color:#fff;padding:8px 12px;border-radius:999px;margin-right:10px;margin-bottom:10px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,0.25)}
+.aba a{color:inherit;text-decoration:none}
 .historico{background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;margin-top:10px}
 img{max-width:100%;border-radius:10px;margin-top:10px}
 @media (max-width:720px){.header{flex-direction:column;align-items:flex-start}.title{font-size:18px}.logo{font-size:26px}}
@@ -212,17 +227,16 @@ document.addEventListener('DOMContentLoaded', initThemeToggle);
 </script>
 """
 
-# ------------- Templates (all inline) -------------
+# ------------- Templates (inline) -------------
 LOGIN_HTML = SHARED_HEAD + """
 <div class="container"><div class="center-card">
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Acesse sua rotina</div></div></div>
     <div class="actions">
-      <a class="ghost small" href="/">Voltar</a>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      <a class="action-btn btn-voltar" href="/">Voltar</a>
+      <button class="btn-theme" data-toggle-theme>Alternar Tema</button>
     </div>
   </div>
-
   <div class="form">
     <h2 style="margin-top:0">Entrar</h2>
     {% if mensagem %}<div style="background:rgba(231,76,60,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
@@ -231,7 +245,7 @@ LOGIN_HTML = SHARED_HEAD + """
       <div class="field"><label for="senha">Senha:</label><input id="senha" type="password" name="senha" required></div>
       <div style="display:flex;gap:10px;align-items:center">
         <button class="btn" type="submit">Entrar</button>
-        <a class="ghost small" href="{{ url_for('registrar') }}">Criar conta</a>
+        <a class="action-btn btn-export" href="{{ url_for('registrar') }}">Criar conta</a>
       </div>
     </form>
   </div>
@@ -243,11 +257,10 @@ REGISTRO_HTML = SHARED_HEAD + """
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino</div><div style="font-size:13px;color:var(--muted)">Crie sua conta</div></div></div>
     <div class="actions">
-      <a class="ghost small" href="/">Voltar</a>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      <a class="action-btn btn-voltar" href="/">Voltar</a>
+      <button class="btn-theme" data-toggle-theme>Alternar Tema</button>
     </div>
   </div>
-
   <div class="form">
     <h2 style="margin-top:0">Registrar</h2>
     {% if mensagem %}<div style="background:rgba(231,76,60,0.08);padding:10px;border-radius:8px;color:var(--danger);margin-bottom:12px">{{ mensagem }}</div>{% endif %}
@@ -258,7 +271,7 @@ REGISTRO_HTML = SHARED_HEAD + """
       <div class="field"><label for="confirmar_senha">Confirmar senha:</label><input id="confirmar_senha" type="password" name="confirmar_senha" required placeholder="Repita a senha"></div>
       <div style="display:flex;gap:10px;align-items:center">
         <button class="btn" type="submit">Criar Conta</button>
-        <a class="ghost small" href="{{ url_for('login') }}">Voltar ao Login</a>
+        <a class="action-btn btn-voltar" href="{{ url_for('login') }}">Voltar ao Login</a>
       </div>
     </form>
   </div>
@@ -277,23 +290,23 @@ MAIN_HTML = SHARED_HEAD + """
     </div>
 
     <div class="actions">
-      <a class="ghost small" href="{{ url_for('criar_treino') }}">Criar Treino</a>
-      <a class="ghost small" href="{{ url_for('exportar') }}">Exportar</a>
+      <a class="action-btn btn-voltar" href="{{ url_for('criar_treino') }}">Voltar</a>
+      <a class="action-btn btn-export" href="{{ url_for('exportar') }}">Exportar</a>
       <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+        <label class="action-btn btn-import" style="cursor:pointer;padding:8px 12px">
           <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
           Importar
         </label>
       </form>
       <form method="post" action="{{ url_for('mesclar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+        <label class="action-btn btn-merge" style="cursor:pointer;padding:8px 12px">
           <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
           Mesclar
         </label>
       </form>
-      <a class="ghost small" href="{{ url_for('logout') }}">Sair</a>
+      <a class="action-btn btn-voltar" href="{{ url_for('logout') }}">Sair</a>
       {% if is_admin %}<a class="btn small" href="{{ url_for('admin_dashboard') }}">Admin</a>{% endif %}
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      <button class="btn-theme" data-toggle-theme>Alternar Tema</button>
     </div>
   </div>
 
@@ -302,7 +315,15 @@ MAIN_HTML = SHARED_HEAD + """
   <section style="display:flex;gap:20px;flex-wrap:wrap">
     <div style="flex:1;min-width:260px">
       <h3>Abas</h3>
-      {% if abas %}<ul style="color:var(--muted)">{% for aba in abas %}<li>{{ aba.nome }}</li>{% endfor %}</ul>{% else %}<p style="color:var(--muted)">Nenhuma aba criada.</p>{% endif %}
+      {% if abas %}
+        <div>
+          {% for aba in abas %}
+            <span class="aba"><a href="/?aba={{ aba.id }}">{{ aba.nome }}</a></span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color:var(--muted)">Nenhuma aba criada.</p>
+      {% endif %}
     </div>
 
     <div style="flex:2;min-width:300px">
@@ -313,8 +334,8 @@ MAIN_HTML = SHARED_HEAD + """
             <div style="display:flex;justify-content:space-between;align-items:center">
               <strong style="font-size:16px">{{ t.nome }}</strong>
               <div>
-                <a class="ghost small" href="{{ url_for('editar', id=t.id) }}">Editar</a>
-                <a class="ghost small" href="{{ url_for('excluir', id=t.id) }}" onclick="return confirm('Excluir exercício?')">Excluir</a>
+                <a class="action-btn btn-voltar" href="{{ url_for('editar', id=t.id) }}">Editar</a>
+                <a class="action-btn btn-merge" href="{{ url_for('excluir', id=t.id) }}" onclick="return confirm('Excluir exercício?')">Excluir</a>
               </div>
             </div>
             {% if t.imagem %}
@@ -341,21 +362,21 @@ CREATE_TREINO_HTML = SHARED_HEAD + """
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">Criar Treino</div><div style="font-size:13px;color:var(--muted)">{{ usuario }}</div></div></div>
     <div class="actions">
-      <a class="ghost small" href="{{ url_for('index') }}">Voltar</a>
-      <a class="ghost small" href="{{ url_for('exportar') }}">Exportar</a>
+      <a class="action-btn btn-voltar" href="{{ url_for('index') }}">Voltar</a>
+      <a class="action-btn btn-export" href="{{ url_for('exportar') }}">Exportar</a>
       <form method="post" action="{{ url_for('importar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+        <label class="action-btn btn-import" style="cursor:pointer;padding:8px 12px">
           <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
           Importar
         </label>
       </form>
       <form method="post" action="{{ url_for('mesclar') }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px">
+        <label class="action-btn btn-merge" style="cursor:pointer;padding:8px 12px">
           <input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()">
           Mesclar
         </label>
       </form>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      <button class="btn-theme" data-toggle-theme>Alternar Tema</button>
     </div>
   </div>
 
@@ -363,7 +384,7 @@ CREATE_TREINO_HTML = SHARED_HEAD + """
     <h3 style="margin-top:0">Criar aba de treino</h3>
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <input id="novaAbaNome" type="text" placeholder="Nome da nova aba (ex: Treino B)" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:var(--text)">
-      <button type="button" id="criarAbaBtn" class="ghost small">OK</button>
+      <button type="button" id="criarAbaBtn" class="action-btn btn-export">OK</button>
     </div>
 
     <div class="field"><label>Nome do treino:</label><input name="nome" required></div>
@@ -386,7 +407,7 @@ CREATE_TREINO_HTML = SHARED_HEAD + """
 
     <div style="display:flex;gap:10px;align-items:center">
       <button class="btn" type="submit">Salvar</button>
-      <a class="ghost small" href="{{ url_for('index') }}">Cancelar</a>
+      <a class="action-btn btn-voltar" href="{{ url_for('index') }}">Cancelar</a>
     </div>
   </form>
 
@@ -426,8 +447,8 @@ ADMIN_EDIT_TREINO_HTML = SHARED_HEAD + """
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">{{ 'Editar' if treino else 'Criar' }} Treino</div><div style="font-size:13px;color:var(--muted)">{{ login }}</div></div></div>
     <div class="actions">
-      <a class="ghost small" href="{{ url_for('admin_ver_treinos', login=login) }}">Voltar</a>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      <a class="action-btn btn-voltar" href="{{ url_for('admin_ver_treinos', login=login) }}">Voltar</a>
+      <button class="btn-theme" data-toggle-theme>Alternar Tema</button>
     </div>
   </div>
 
@@ -438,7 +459,7 @@ ADMIN_EDIT_TREINO_HTML = SHARED_HEAD + """
     <div style="margin-bottom:8px"><label>Séries: <input name="series" value="{{ treino.series if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
     <div style="margin-bottom:8px"><label>Repetições: <input name="repeticoes" value="{{ treino.repeticoes if treino else '' }}" style="width:100%;padding:8px;border-radius:6px"></label></div>
     <div style="margin-bottom:8px"><label>Observações:<br><textarea name="observacoes" rows="4" style="width:100%;padding:8px;border-radius:6px">{{ treino.observacoes if treino else '' }}</textarea></label></div>
-    <div style="display:flex;gap:8px"><button class="btn" type="submit">Salvar</button><a class="ghost small" href="{{ url_for('admin_ver_treinos', login=login) }}">Cancelar</a></div>
+    <div style="display:flex;gap:8px"><button class="btn" type="submit">Salvar</button><a class="action-btn btn-voltar" href="{{ url_for('admin_ver_treinos', login=login) }}">Cancelar</a></div>
   </form>
 
 </div></div>
@@ -449,15 +470,15 @@ VIEW_TRAINING_HTML = SHARED_HEAD + """
   <div class="header">
     <div class="brand"><div class="logo">🏋️</div><div><div class="title">Treinos de {{ login }}</div><div style="font-size:13px;color:var(--muted)">Visualização administrativa</div></div></div>
     <div class="actions">
-      <a class="ghost small" href="{{ url_for('admin_usuarios') }}">Voltar</a>
-      <a class="ghost small" href="{{ url_for('admin_exportar_usuario', login=login) }}">Exportar</a>
+      <a class="action-btn btn-voltar" href="{{ url_for('admin_usuarios') }}">Voltar</a>
+      <a class="action-btn btn-export" href="{{ url_for('admin_exportar_usuario', login=login) }}">Exportar</a>
       <form method="post" action="{{ url_for('admin_importar_usuario', login=login) }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Importar</label>
+        <label class="action-btn btn-import" style="cursor:pointer;padding:8px 12px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Importar</label>
       </form>
       <form method="post" action="{{ url_for('admin_mesclar_usuario', login=login) }}" enctype="multipart/form-data" style="display:inline">
-        <label class="ghost small" style="cursor:pointer;padding:6px 10px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Mesclar</label>
+        <label class="action-btn btn-merge" style="cursor:pointer;padding:8px 12px"><input type="file" name="arquivo" accept=".json" style="display:none" onchange="this.form.submit()"> Mesclar</label>
       </form>
-      <button class="ghost small" data-toggle-theme>Alternar Tema</button>
+      <button class="btn-theme" data-toggle-theme>Alternar Tema</button>
     </div>
   </div>
 
@@ -475,9 +496,9 @@ VIEW_TRAINING_HTML = SHARED_HEAD + """
         {% endif %}
         Séries: {{ t.series }} — Reps: {{ t.repeticoes }}<br>
         Observações: {{ t.observacoes }}<br>
-        <a class="ghost small" href="{{ url_for('admin_editar_treino', login=login, treino_id=t.id) }}">Editar</a>
-        <a class="ghost small" href="{{ url_for('admin_excluir_treino', login=login, treino_id=t.id) }}" onclick="return confirm('Excluir treino?')">Excluir</a>
-        <a class="ghost small" href="{{ url_for('admin_duplicar_treino', login=login, treino_id=t.id) }}">Duplicar</a>
+        <a class="action-btn btn-voltar" href="{{ url_for('admin_editar_treino', login=login, treino_id=t.id) }}">Editar</a>
+        <a class="action-btn btn-merge" href="{{ url_for('admin_excluir_treino', login=login, treino_id=t.id) }}" onclick="return confirm('Excluir treino?')">Excluir</a>
+        <a class="action-btn btn-export" href="{{ url_for('admin_duplicar_treino', login=login, treino_id=t.id) }}">Duplicar</a>
         <h4>Histórico</h4>
         {% if t.historico %}<ul style="color:var(--muted)">{% for h in t.historico %}<li>{{ h.data }} — peso {{ h.peso }} — reps {{ h.reps }}</li>{% endfor %}</ul>{% else %}<p style="color:var(--muted)">Sem histórico</p>{% endif %}
       </div>
@@ -661,7 +682,6 @@ def criar_treino():
 
 @app.route("/adicionar", methods=["POST"])
 def adicionar():
-    # compatibility (old endpoint) redirects to criar_treino POST
     return criar_treino()
 
 @app.route("/registrar/<int:id>", methods=["POST"])
@@ -736,7 +756,7 @@ def admin_dashboard():
     return render_template_string(SHARED_HEAD + """
     <div class="container"><div class="center-card">
       <div class="header"><div class="brand"><div class="logo">🏋️</div><div><div class="title">Meu Treino — Admin</div><div style="font-size:13px;color:var(--muted)">Painel administrativo</div></div></div>
-      <div class="actions"><a class="ghost small" href="{{ url_for('admin_usuarios') }}">Gerenciar Usuários</a><a class="ghost small" href='{{ url_for("index") }}'>Voltar</a><button class="ghost small" data-toggle-theme>Alternar Tema</button></div></div>
+      <div class="actions"><a class="action-btn btn-export" href="{{ url_for('admin_usuarios') }}">Gerenciar Usuários</a><a class="action-btn btn-voltar" href='{{ url_for("index") }}'>Voltar</a><button class="btn-theme" data-toggle-theme>Alternar Tema</button></div></div>
       <div style="display:flex;gap:18px;flex-wrap:wrap"><div style="flex:1;min-width:220px">
       <h3>Resumo</h3><ul style="color:var(--muted)"><li>Total de usuários: {{ total }}</li><li>Usuários ativos: {{ ativos }}</li><li>Usuários bloqueados: {{ bloqueados }}</li><li>Total de treinos: {{ total_treinos }}</li></ul></div>
       <div style="flex:2;min-width:300px"><h3>Últimos registros</h3><ul style="color:var(--muted)">{% for login, meta in recent_regs %}<li>{{ login }} — {{ meta.data_cadastro }}</li>{% endfor %}</ul><h3>Últimos acessos</h3><ul style="color:var(--muted)">{% for login, meta in recent_access %}<li>{{ login }} — {{ meta.ultimo_acesso or "-" }}</li>{% endfor %}</ul></div></div></div></div>
@@ -755,9 +775,9 @@ def admin_usuarios():
         items.append((login, meta))
     items_sorted = sorted(items, key=lambda kv: kv[0].lower())
     return render_template_string(SHARED_HEAD + """
-    <div class="container"><div class="center-card"><div class="header"><div class="brand"><div class="logo">🏋️</div><div><div class="title">Usuários</div><div style="font-size:13px;color:var(--muted)">Gerenciar contas</div></div></div><div class="actions"><a class="ghost small" href="{{ url_for('admin_dashboard') }}">Dashboard</a><button class="ghost small" data-toggle-theme>Alternar Tema</button></div></div>
-    <form method="get" action="{{ url_for('admin_usuarios') }}" style="margin-bottom:12px"><input name="q" placeholder="Pesquisar..." value="{{ query }}" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);width:60%;max-width:360px"><button class="btn small" type="submit">Pesquisar</button><a href="{{ url_for('admin_usuarios') }}" class="ghost small" style="margin-left:8px">Limpar</a></form>
-    <div style="overflow:auto"><table border="0" cellpadding="8" style="width:100%;border-collapse:collapse;color:var(--text)"><thead style="text-align:left;color:var(--muted)"><tr><th>Usuário</th><th>Nome</th><th>Tipo</th><th>Status</th><th>Cadastro</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>{% for login, meta in users %}<tr style="border-top:1px solid rgba(255,255,255,0.03)"><td>{{ login }}</td><td>{{ meta.nome }} {{ meta.sobrenome }}</td><td>{{ meta.tipo }}</td><td>{{ 'Ativo' if meta.ativo else 'Bloqueado' }}</td><td>{{ meta.data_cadastro }}</td><td>{{ meta.ultimo_acesso or '-' }}</td><td><a class="ghost small" href='{{ url_for("admin_ver_treinos", login=login) }}'>Ver</a> <a class="ghost small" href='{{ url_for("admin_editar_usuario", login=login) }}'>Editar</a> {% if meta.ativo %}<form style="display:inline" method="post" action="{{ url_for('admin_bloquear', login=login) }}"><button class="ghost small" type="submit">Bloquear</button></form>{% else %}<form style="display:inline" method="post" action="{{ url_for('admin_desbloquear', login=login) }}"><button class="ghost small" type="submit">Desbloquear</button></form>{% endif %} {% if login != ADMIN_LOGIN %}<form style="display:inline" method="post" action="{{ url_for('admin_excluir', login=login) }}" onsubmit="return confirm('Confirma exclusão de ' + '{{login}}' + ' ?');"><button class="ghost small" type="submit">Excluir</button></form>{% endif %} <form style="display:inline" method="post" action='{{ url_for("admin_reset_senha", login=login) }}'><input type="password" name="nova_senha" placeholder="Nova senha" style="padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.06)"><button class="ghost small" type="submit">Resetar</button></form></td></tr>{% endfor %}</tbody></table></div><p style="margin-top:12px"><a href="{{ url_for('admin_dashboard') }}">Voltar ao Dashboard</a></p></div></div>
+    <div class="container"><div class="center-card"><div class="header"><div class="brand"><div class="logo">🏋️</div><div><div class="title">Usuários</div><div style="font-size:13px;color:var(--muted)">Gerenciar contas</div></div></div><div class="actions"><a class="action-btn btn-export" href="{{ url_for('admin_dashboard') }}">Dashboard</a><button class="btn-theme" data-toggle-theme>Alternar Tema</button></div></div>
+    <form method="get" action="{{ url_for('admin_usuarios') }}" style="margin-bottom:12px"><input name="q" placeholder="Pesquisar..." value="{{ query }}" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);width:60%;max-width:360px"><button class="btn small" type="submit">Pesquisar</button><a href="{{ url_for('admin_usuarios') }}" class="action-btn btn-voltar" style="margin-left:8px">Limpar</a></form>
+    <div style="overflow:auto"><table border="0" cellpadding="8" style="width:100%;border-collapse:collapse;color:var(--text)"><thead style="text-align:left;color:var(--muted)"><tr><th>Usuário</th><th>Nome</th><th>Tipo</th><th>Status</th><th>Cadastro</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>{% for login, meta in users %}<tr style="border-top:1px solid rgba(255,255,255,0.03)"><td>{{ login }}</td><td>{{ meta.nome }} {{ meta.sobrenome }}</td><td>{{ meta.tipo }}</td><td>{{ 'Ativo' if meta.ativo else 'Bloqueado' }}</td><td>{{ meta.data_cadastro }}</td><td>{{ meta.ultimo_acesso or '-' }}</td><td><a class="action-btn btn-export" href='{{ url_for("admin_ver_treinos", login=login) }}'>Ver</a> <a class="action-btn btn-merge" href='{{ url_for("admin_editar_usuario", login=login) }}'>Editar</a> {% if meta.ativo %}<form style="display:inline" method="post" action="{{ url_for('admin_bloquear', login=login) }}"><button class="action-btn btn-merge" type="submit">Bloquear</button></form>{% else %}<form style="display:inline" method="post" action="{{ url_for('admin_desbloquear', login=login) }}"><button class="action-btn btn-export" type="submit">Desbloquear</button></form>{% endif %} {% if login != ADMIN_LOGIN %}<form style="display:inline" method="post" action="{{ url_for('admin_excluir', login=login) }}" onsubmit="return confirm('Confirma exclusão de ' + '{{login}}' + ' ?');"><button class="action-btn btn-voltar" type="submit">Excluir</button></form>{% endif %} <form style="display:inline" method="post" action='{{ url_for("admin_reset_senha", login=login) }}'><input type="password" name="nova_senha" placeholder="Nova senha" style="padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.06)"><button class="action-btn btn-import" type="submit">Resetar</button></form></td></tr>{% endfor %}</tbody></table></div><p style="margin-top:12px"><a class="action-btn btn-voltar" href="{{ url_for('admin_dashboard') }}">Voltar ao Dashboard</a></p></div></div>
     """, users=items_sorted, query=q, ADMIN_LOGIN=ADMIN_LOGIN)
 
 @app.route("/admin/usuario/editar/<login>", methods=["GET","POST"])
