@@ -9,7 +9,7 @@ Aplicação Flask completa (único arquivo) com:
 - Exportar / Importar / Mesclar (merge) de JSON de treinos
 - Layout responsivo, tema claro/escuro, emoji de academia
 - Abas visíveis (botões coloridos) e ações do cabeçalho como botões coloridos
-- Ajuste visual dos botões do cabeçalho para alinhamento consistente
+- Ajuste visual dos botões do cabeçalho para alinhamento consistente (texto reto)
 - Rota /health e print(app.url_map) para debug
 """
 
@@ -180,7 +180,7 @@ body{background:var(--bg);color:var(--text);display:flex;align-items:center;just
 .logo{font-size:30px;line-height:1;display:flex;align-items:center}
 .title{font-weight:800;font-size:22px}
 
-/* ---------- Header controls: consistent, accessible, usable ---------- */
+/* ======= Alinhamento reto do texto nos botões do cabeçalho ======= */
 :root{
   --hdr-height: 44px;
   --hdr-minw: 88px;
@@ -195,33 +195,39 @@ body{background:var(--bg);color:var(--text);display:flex;align-items:center;just
   align-items:center;
   flex-wrap:wrap;
 }
+/* força todos os controles do header a terem mesmo comportamento */
 .actions a.action-btn,
 .actions button.action-btn,
 .actions label.action-btn,
 .actions .btn-theme {
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  height:var(--hdr-height);
-  min-width:var(--hdr-minw);
-  padding:0 16px;
-  border-radius:var(--btn-radius);
-  font-weight:700;
-  font-size:var(--btn-font-size);
-  color:#fff;
-  text-decoration:none;
-  border:none;
-  background:transparent;
-  cursor:pointer;
-  box-sizing:border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--hdr-height);
+  min-width: var(--hdr-minw);
+  padding: 0 16px;
+  border-radius: var(--btn-radius);
+  font-weight: 700;
+  font-size: var(--btn-font-size);
+  color: #fff;
+  text-decoration: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  box-sizing: border-box;
+  line-height: normal;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
-  -webkit-tap-highlight-color: transparent;
 }
-.actions label.action-btn { cursor:pointer; }
+.actions label.action-btn { cursor: pointer; }
+
+/* color variants */
 .btn-voltar{ background:var(--btn-voltar); }
 .btn-export{ background:var(--btn-export); }
 .btn-import{ background:var(--btn-import); }
 .btn-merge { background:var(--btn-merge); }
+
 .btn-theme{
   background: transparent;
   color: var(--accent);
@@ -229,26 +235,33 @@ body{background:var(--bg);color:var(--text);display:flex;align-items:center;just
   min-width: auto;
   padding: 0 12px;
 }
+
+/* hide native file input */
+.actions input[type="file"] { display:none; }
+
+/* ensure direct children keep layout */
+.actions > * { display:inline-flex !important; align-items:center !important; justify-content:center !important; margin:0 !important; }
+
+/* hover / active / focus */
 .actions a.action-btn:hover,
 .actions button.action-btn:hover,
 .actions label.action-btn:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   box-shadow: var(--btn-shadow);
   opacity: 0.98;
 }
 .actions a.action-btn:active,
 .actions button.action-btn:active,
 .actions label.action-btn:active { transform: translateY(-1px); }
+
 .actions a.action-btn:focus,
 .actions button.action-btn:focus,
 .actions label.action-btn:focus,
 .actions .btn-theme:focus {
-  outline: 3px solid rgba(124,92,255,0.18);
+  outline: 3px solid rgba(124,92,255,0.14);
   outline-offset: 2px;
   box-shadow: 0 8px 28px rgba(124,92,255,0.08);
 }
-.actions input[type="file"] { display:none; }
-.actions > * { display:inline-flex !important; align-items:center !important; justify-content:center !important; margin:0 !important; }
 
 .form{max-width:780px;margin:0 auto}
 .field{margin-bottom:12px}
@@ -691,7 +704,7 @@ def admin_usuarios():
     return render_template_string(SHARED_HEAD + """
     <div class="container"><div class="center-card"><div class="header"><div class="brand"><div class="logo">🏋️</div><div><div class="title">Usuários</div><div style="font-size:13px;color:var(--muted)">Gerenciar contas</div></div></div><div class="actions"><a class="action-btn btn-export" href="{{ url_for('admin_dashboard') }}">Dashboard</a><button class="btn-theme" data-toggle-theme>Alternar Tema</button></div></div>
     <form method="get" action="{{ url_for('admin_usuarios') }}" style="margin-bottom:12px"><input name="q" placeholder="Pesquisar..." value="{{ query }}" style="padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);width:60%;max-width:360px"><button class="btn small" type="submit">Pesquisar</button><a href="{{ url_for('admin_usuarios') }}" class="action-btn btn-voltar" style="margin-left:8px">Limpar</a></form>
-    <div style="overflow:auto"><table border="0" cellpadding="8" style="width:100%;border-collapse:collapse;color:var(--text)"><thead style="text-align:left;color:var(--muted)"><tr><th>Usuário</th><th>Nome</th><th>Tipo</th><th>Status</th><th>Cadastro</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>{% for login, meta in users %}<tr style="border-top:1px solid rgba(255,255,255,0.03)"><td>{{ login }}</td><td>{{ meta.nome }} {{ meta.sobrenome }}</td><td>{{ meta.tipo }}</td><td>{{ 'Ativo' if meta.ativo else 'Bloqueado' }}</td><td>{{ meta.data_cadastro }}</td><td>{{ meta.ultimo_acesso or '-' }}</td><td><a class="action-btn btn-export" href='{{ url_for("admin_ver_treinos", login=login) }}'>Ver</a> <a class="action-btn btn-merge" href='{{ url_for("admin_editar_usuario", login=login) }}'>Editar</a> {% if meta.ativo %}<form style="display:inline" method="post" action="{{ url_for('admin_bloquear', login=login) }}"><button class="action-btn btn-merge" type="submit">Bloquear</button></form>{% else %}<form style="display:inline" method="post" action="{{ url_for('admin_desbloquear', login=login) }}"><button class="action-btn btn-export" type="submit">Desbloquear</button></form>{% endif %} {% if login != ADMIN_LOGIN %}<form style="display:inline" method="post" action="{{ url_for('admin_excluir', login=login) }}" onsubmit="return confirm('Confirma exclusão de ' + '{{login}}' + ' ?');"><button class="action-btn btn-voltar" type="submit">Excluir</button></form>{% endif %} <form style="display:inline" method="post" action='{{ url_for("admin_reset_senha", login=login) }}'><input type="password" name="nova_senha" placeholder="Nova senha" style="padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.06)"><button class="action-btn btn-import" type="submit">Resetar</button></form></td></tr>{% endfor %}</tbody></table></div><p style="margin-top:12px"><a class="action-btn btn-voltar" href="{{ url_for('admin_dashboard') }}">Voltar ao Dashboard</a></p></div></div>
+    <div style="overflow:auto"><table border="0" cellpadding="8" style="width:100%;border-collapse:collapse;color:var(--text)"><thead style="text-align:left;color:var(--muted)"><tr><th>Usuário</th><th>Nome</th><th>Tipo</th><th>Status</th><th>Cadastro</th><th>Último acesso</th><th>Ações</th></tr></thead><tbody>{% for login, meta in users %}<tr style="border-top:1px solid rgba(255,255,255,0.03)"><td>{{ login }}</td><td>{{ meta.nome }} {{ meta.sobrenome }}</td><td>{{ meta.tipo }}</td><td>{{ 'Ativo' if meta.ativo else 'Bloqueado' }}</td><td>{{ meta.data_cadastro }}</td><td>{{ meta.ultimo_acesso or '-' }}</td><td><a class="action-btn btn-export" href='{{ url_for("admin_ver_treinos", login=login) }}'>Ver</a> <a class="action-btn btn-merge" href='{{ url_for("admin_editar_usuario", login=login) }}'>Editar</a> {% if meta.ativo %}<form style="display:inline" method="post" action="{{ url_for('admin_bloquear', login=login) ?>"><button class="action-btn btn-merge" type="submit">Bloquear</button></form>{% else %}<form style="display:inline" method="post" action="{{ url_for('admin_desbloquear', login=login) }}"><button class="action-btn btn-export" type="submit">Desbloquear</button></form>{% endif %} {% if login != ADMIN_LOGIN %}<form style="display:inline" method="post" action="{{ url_for('admin_excluir', login=login) }}" onsubmit="return confirm('Confirma exclusão de ' + '{{login}}' + ' ?');"><button class="action-btn btn-voltar" type="submit">Excluir</button></form>{% endif %} <form style="display:inline" method="post" action='{{ url_for("admin_reset_senha", login=login) }}'><input type="password" name="nova_senha" placeholder="Nova senha" style="padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.06)"><button class="action-btn btn-import" type="submit">Resetar</button></form></td></tr>{% endfor %}</tbody></table></div><p style="margin-top:12px"><a class="action-btn btn-voltar" href="{{ url_for('admin_dashboard') }}">Voltar ao Dashboard</a></p></div></div>
     """, users=items_sorted, query=q, ADMIN_LOGIN=ADMIN_LOGIN)
 
 @app.route("/admin/usuario/editar/<login>", methods=["GET","POST"])
